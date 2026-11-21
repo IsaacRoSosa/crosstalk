@@ -12,9 +12,9 @@ export const Route = createFileRoute('/api/tracks/analyze-playlist')({
         try {
           const { spotifyUrl } = await request.json()
 
-          const clientId = process.env.VITE_SPOTIFY_CLIENT_ID
-          const clientSecret = process.env.VITE_SPOTIFY_CLIENT_SECRET
-          const geniusToken = process.env.VITE_GENIUS_ACCESS_TOKEN
+          const clientId = process.env.SPOTIFY_CLIENT_ID
+          const clientSecret = process.env.SPOTIFY_CLIENT_SECRET
+          const geniusToken = process.env.GENIUS_ACCESS_TOKEN
           const geminiApiKeys = getGeminiApiKeys()
 
           if (!clientId || !clientSecret || geminiApiKeys.length === 0) {

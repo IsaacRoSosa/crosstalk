@@ -4,12 +4,12 @@ import type { AnalysisResult, Emotion } from '../types/track'
 // Get all available Gemini API keys from environment
 export function getGeminiApiKeys(): string[] {
   return [
-    process.env.VITE_GEMINI_API_KEY_1,
-    process.env.VITE_GEMINI_API_KEY_2,
-    process.env.VITE_GEMINI_API_KEY_3,
-    process.env.VITE_GEMINI_API_KEY_4,
-    process.env.VITE_GEMINI_API_KEY_5,
-    process.env.VITE_GEMINI_API_KEY_6,
+    process.env.GEMINI_API_KEY_1,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+    process.env.GEMINI_API_KEY_4,
+    process.env.GEMINI_API_KEY_5,
+    process.env.GEMINI_API_KEY_6,
   ].filter((key): key is string => !!key)
 }
 

@@ -20,7 +20,7 @@ A music visualization application that transforms your Spotify tracks into an in
 - **AI**: Google Gemini API
 - **APIs**: Spotify, Genius, YouTube
 - **Database**: SQLite (better-sqlite3)
-- **Auth**: Better Auth
+- **Auth**: Supabase Auth (in progress)
 
 ## Getting Started
 
@@ -31,13 +31,11 @@ A music visualization application that transforms your Spotify tracks into an in
    npm install
    ```
 
-3. Set up environment variables in `.env.local`:
-   ```
-   SPOTIFY_CLIENT_ID=your_spotify_client_id
-   SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
-   GENIUS_ACCESS_TOKEN=your_genius_token
-   GEMINI_API_KEY=your_gemini_api_key
-   BETTER_AUTH_SECRET=your_auth_secret
+3. Copy `.env.example` to `.env` and fill in the values. Secrets have no `VITE_` prefix so they stay on the server; only the Supabase URL and publishable key are exposed to the browser.
+
+   To check which Spotify endpoints work for your app (Spotify restricted Development Mode apps in 2026):
+   ```bash
+   node --env-file=.env scripts/check-spotify.mjs [spotify playlist or track URLs...]
    ```
 
 4. Run the development server:

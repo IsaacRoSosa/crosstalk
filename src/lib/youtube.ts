@@ -3,7 +3,7 @@ import { createServerFn } from '@tanstack/react-start'
 export const searchYouTube = createServerFn({ method: 'POST' })
   .inputValidator((d: string) => d)
   .handler(async ({ data: query }) => {
-    const apiKey = process.env.VITE_YOUTUBE_API_KEY
+    const apiKey = process.env.YOUTUBE_API_KEY
     if (!apiKey) {
       throw new Error('YouTube API key not configured')
     }
