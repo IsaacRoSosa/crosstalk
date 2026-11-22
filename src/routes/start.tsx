@@ -5,6 +5,7 @@ import { Eyebrow, GhostButton, Panel, PanelHeader, PrimaryButton, ghostButtonCla
 import { apiFetch } from '../lib/api-client'
 import { isEmptyImport, parseImportInput, type ParsedImportInput } from '../lib/import-input'
 import { importSongs, type ImportResult } from '../lib/import-client'
+import { ApiError, autoNameNucleus, createNucleus, listTracks } from '../lib/nuclei-client'
 import { listenForAiConnected, startOpenRouterConnect } from '../lib/openrouter-connect'
 import { getTemp, removeTemp, setTemp } from '../lib/temp-storage'
 import type { Track } from '../types/track'
@@ -19,6 +20,8 @@ type Step = 'music' | 'ai' | 'forming'
 
 // What the person pasted, kept across reloads and the OpenRouter tab (localStorage, for a day)
 const PENDING_IMPORT_KEY = 'crosstalk.pendingImport'
+// The nucleus being filled, so retrying after connecting the AI adds to the same one
+const PENDING_NUCLEUS_KEY = 'crosstalk.pendingNucleus'
 const PENDING_IMPORT_TTL_MS = 24 * 60 * 60 * 1000
 
 function readStepFromUrl(): Step {
@@ -94,6 +97,8 @@ function MusicStep({ onContinue }: { onContinue: () => void }) {
 
   const handleContinue = () => {
     setTemp(PENDING_IMPORT_KEY, input, PENDING_IMPORT_TTL_MS)
+    // New songs: pick the nucleus again when forming starts
+    removeTemp(PENDING_NUCLEUS_KEY)
     onContinue()
   }
 
@@ -321,7 +326,26 @@ function FormingStep({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [expected, setExpected] = useState(25)
   const [added, setAdded] = useState(0)
+  const [nucleusId, setNucleusId] = useState<number | null>(null)
   const started = useRef(false)
+
+  // The nucleus these songs go into: the one picked earlier in this onboarding if it still exists,
+  // otherwise one from the server (an empty one, a guest's only one, or a new one)
+  const resolveNucleus = async (): Promise<{ id: number; tracks: Track[] }> => {
+    const stored = Number(getTemp(PENDING_NUCLEUS_KEY))
+    if (stored > 0) {
+      try {
+        const { tracks } = await listTracks(stored)
+        return { id: stored, tracks }
+      } catch (err) {
+        if (!(err instanceof ApiError && err.status === 404)) throw err
+      }
+    }
+    const { nucleus } = await createNucleus({ mode: 'onboarding' })
+    setTemp(PENDING_NUCLEUS_KEY, String(nucleus.id), PENDING_IMPORT_TTL_MS)
+    const { tracks } = await listTracks(nucleus.id)
+    return { id: nucleus.id, tracks }
+  }
 
   const run = useCallback(async () => {
     const input = getTemp(PENDING_IMPORT_KEY)
@@ -334,51 +358,51 @@ function FormingStep({ onBack }: { onBack: () => void }) {
     setPhase('importing')
     setError(null)
 
-    let before = 0
+    let target: { id: number; tracks: Track[] }
     try {
-      const res = await apiFetch('/api/tracks')
-      const data = await res.json()
-      before = data.tracks?.length ?? 0
-      setTracks(data.tracks ?? [])
-    } catch {
-      // the import below reports real problems
+      target = await resolveNucleus()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not prepare your nucleus')
+      setPhase('failed')
+      return
     }
+    const before = target.tracks.length
+    setNucleusId(target.id)
+    setTracks(target.tracks)
 
     // Show songs entering orbit while the import runs
     const poll = setInterval(async () => {
       try {
-        const res = await apiFetch('/api/tracks')
-        const data = await res.json()
-        if (res.ok && data.tracks) {
-          setTracks(data.tracks)
-          setAdded(Math.max(0, data.tracks.length - before))
-        }
+        const data = await listTracks(target.id)
+        setTracks(data.tracks)
+        setAdded(Math.max(0, data.tracks.length - before))
       } catch {
         // keep polling
       }
     }, 2000)
 
     try {
-      const data = await importSongs(input)
+      const data = await importSongs(target.id, input)
       setSummary(data)
       setAdded(data.successCount)
 
-      const finalRes = await apiFetch('/api/tracks')
-      const finalData = await finalRes.json()
-      if (finalRes.ok) setTracks(finalData.tracks ?? [])
+      const finalData = await listTracks(target.id).catch(() => null)
+      if (finalData) setTracks(finalData.tracks)
 
       if (data.successCount > 0 && !data.aiError) {
         setPhase('naming')
         try {
-          const nameRes = await apiFetch('/api/nucleus/rename', { method: 'POST' })
-          const nameData = await nameRes.json()
-          if (nameRes.ok && nameData.name) setNucleusName(nameData.name)
+          const named = await autoNameNucleus(target.id)
+          if (named.name) setNucleusName(named.name)
         } catch {
           // a nucleus without a new name is fine
         }
       }
-      // Keep the songs if the AI wasn't available, so connecting it and coming back retries them
-      if (!data.aiError) removeTemp(PENDING_IMPORT_KEY)
+      // Keep the songs (and the nucleus) if the AI wasn't available, so connecting it and coming back retries them
+      if (!data.aiError) {
+        removeTemp(PENDING_IMPORT_KEY)
+        removeTemp(PENDING_NUCLEUS_KEY)
+      }
       setPhase('done')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not add your songs')
@@ -480,6 +504,9 @@ function FormingStep({ onBack }: { onBack: () => void }) {
         <div className="mt-5 flex flex-wrap justify-end gap-2.5">
           {phase === 'failed' && (
             <>
+              <Link to="/app" className={ghostButtonClass}>
+                your nuclei
+              </Link>
               <GhostButton onClick={onBack}>edit songs</GhostButton>
               <PrimaryButton onClick={run}>try again</PrimaryButton>
             </>
@@ -487,8 +514,12 @@ function FormingStep({ onBack }: { onBack: () => void }) {
           {done && needsAi && (
             <PrimaryButton onClick={() => startOpenRouterConnect('/start?step=forming')}>connect openrouter</PrimaryButton>
           )}
-          {done && (
-            <Link to="/app" className={needsAi ? ghostButtonClass : primaryButtonClass}>
+          {done && nucleusId !== null && (
+            <Link
+              to="/app/n/$nucleusId"
+              params={{ nucleusId: String(nucleusId) }}
+              className={needsAi ? ghostButtonClass : primaryButtonClass}
+            >
               open your nucleus →
             </Link>
           )}

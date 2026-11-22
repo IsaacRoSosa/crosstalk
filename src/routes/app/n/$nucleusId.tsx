@@ -1,16 +1,31 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Music, Sparkles, Plus, Trash2, ChevronDown, ChevronUp, Pause, Play, Volume2, X, PanelRightOpen, PanelRightClose } from 'lucide-react'
-import { NucleusVisualization } from '../components/NucleusVisualization'
-import type { NucleusVisualizationHandle } from '../components/NucleusVisualization'
-import { NucleusChat } from '../components/NucleusChat'
-import { AiConnectionPanel } from '../components/AiConnectionPanel'
-import { AccountPanel } from '../components/AccountPanel'
-import type { Track } from '../types/track'
-import { apiFetch } from '../lib/api-client'
-import { isEmptyImport, parseImportInput } from '../lib/import-input'
-import { importSongs } from '../lib/import-client'
-import '../styles/galaxy.css'
+import { Music, Sparkles, Plus, Trash2, ChevronDown, ChevronUp, Pause, Play, Volume2, X, PanelRightOpen, PanelRightClose, ArrowLeft, Orbit, List } from 'lucide-react'
+import { NucleusVisualization } from '../../../components/NucleusVisualization'
+import type { NucleusVisualizationHandle } from '../../../components/NucleusVisualization'
+import { NucleusChat } from '../../../components/NucleusChat'
+import { AiConnectionPanel } from '../../../components/AiConnectionPanel'
+import { AccountPanel } from '../../../components/AccountPanel'
+import { TrackListView, type NucleusOption, type TransferTarget } from '../../../components/TrackListView'
+import { PulseDot, primaryButtonClass } from '../../../components/ui'
+import type { Track } from '../../../types/track'
+import { MAX_NUCLEI } from '../../../types/nucleus'
+import { apiFetch } from '../../../lib/api-client'
+import { saveWithGoogle } from '../../../lib/auth'
+import { isEmptyImport, parseImportInput } from '../../../lib/import-input'
+import { importSongs } from '../../../lib/import-client'
+import {
+  ApiError,
+  autoNameNucleus,
+  createNucleus,
+  getNucleus,
+  listNuclei,
+  listTracks,
+  removeTracks,
+  renameNucleus as renameNucleusRequest,
+  transferTracks,
+} from '../../../lib/nuclei-client'
+import '../../../styles/galaxy.css'
 
 // YouTube IFrame API types
 interface YTPlayer {
@@ -50,9 +65,30 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export const Route = createFileRoute('/app')({ component: App })
+type View = 'galaxy' | 'list'
 
-function App() {
+export const Route = createFileRoute('/app/n/$nucleusId')({
+  component: NucleusPage,
+  validateSearch: (search: Record<string, unknown>): { view?: View } => (search.view === 'list' ? { view: 'list' } : {}),
+})
+
+// Remounts the page when moving between nuclei, so no state (tracks, chat, selection) leaks across
+function NucleusPage() {
+  const { nucleusId } = Route.useParams()
+  return <NucleusScreen key={nucleusId} nucleusId={Number(nucleusId)} />
+}
+
+function NucleusScreen({ nucleusId }: { nucleusId: number }) {
+  const navigate = useNavigate()
+  const view: View = Route.useSearch().view ?? 'galaxy'
+  const setView = (next: View) =>
+    navigate({ to: '/app/n/$nucleusId', params: { nucleusId: String(nucleusId) }, search: next === 'list' ? { view: 'list' } : {}, replace: true })
+
+  const [notFound, setNotFound] = useState(false)
+  const [isAnonymous, setIsAnonymous] = useState(true)
+  const [otherNuclei, setOtherNuclei] = useState<NucleusOption[]>([])
+  const [nucleusCount, setNucleusCount] = useState(1)
+  const [editingName, setEditingName] = useState<string | null>(null)
   const [tracks, setTracks] = useState<Track[]>([])
   const [importInput, setImportInput] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -419,31 +455,86 @@ function App() {
   useEffect(() => {
     loadTracks()
     loadNucleus()
+    loadLibrary()
   }, [])
 
   const loadTracks = async () => {
     try {
-      const response = await apiFetch('/api/tracks')
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to load tracks')
-      }
-      setTracks(data.tracks || [])
+      const data = await listTracks(nucleusId)
+      setTracks(data.tracks)
     } catch (error) {
-      console.error('Failed to load tracks:', error)
+      if (error instanceof ApiError && (error.status === 404 || error.status === 400)) setNotFound(true)
+      else console.error('Failed to load tracks:', error)
     }
   }
 
   const loadNucleus = async () => {
     try {
-      const response = await apiFetch('/api/chat')
-      const data = await response.json()
-      if (data.nucleus?.name) {
-        setNucleusName(data.nucleus.name)
-      }
+      const data = await getNucleus(nucleusId)
+      setNucleusName(data.nucleus.name)
     } catch (error) {
-      console.error('Failed to load nucleus:', error)
+      if (error instanceof ApiError && (error.status === 404 || error.status === 400)) setNotFound(true)
+      else console.error('Failed to load nucleus:', error)
     }
+  }
+
+  // The user's other nuclei, as places to move or copy songs to
+  const loadLibrary = async () => {
+    try {
+      const data = await listNuclei()
+      setIsAnonymous(data.isAnonymous)
+      setNucleusCount(data.nuclei.length)
+      setOtherNuclei(data.nuclei.filter((n) => n.id !== nucleusId).map(({ id, name, trackCount }) => ({ id, name, trackCount })))
+    } catch (error) {
+      console.error('Failed to load nuclei:', error)
+    }
+  }
+
+  const saveName = async () => {
+    const name = editingName?.trim()
+    setEditingName(null)
+    if (!name || name === nucleusName) return
+    const previous = nucleusName
+    setNucleusName(name)
+    try {
+      await renameNucleusRequest(nucleusId, name)
+    } catch (error) {
+      setNucleusName(previous)
+      setError(error instanceof Error ? error.message : 'Could not rename the nucleus')
+    }
+  }
+
+  const handleRemoveTracks = async (trackIds: number[]) => {
+    await removeTracks(nucleusId, trackIds)
+    const removed = new Set(trackIds)
+    setTracks((prev) => prev.filter((t) => !removed.has(t.id)))
+    if (playingTrack && removed.has(playingTrack.id)) stopPlayback()
+  }
+
+  const handleTransfer = async (trackIds: number[], target: TransferTarget, mode: 'copy' | 'move'): Promise<string> => {
+    let targetId: number
+    let targetName: string
+    if ('newName' in target) {
+      const created = await createNucleus({ name: target.newName })
+      targetId = created.nucleus.id
+      targetName = created.nucleus.name
+    } else {
+      targetId = target.nucleusId
+      targetName = otherNuclei.find((n) => n.id === targetId)?.name ?? 'the other nucleus'
+    }
+
+    const result = await transferTracks(nucleusId, targetId, trackIds, mode)
+    if (mode === 'move') {
+      const moved = new Set(trackIds)
+      setTracks((prev) => prev.filter((t) => !moved.has(t.id)))
+      if (playingTrack && moved.has(playingTrack.id)) stopPlayback()
+    }
+    await loadLibrary()
+
+    const verb = mode === 'move' ? 'moved' : 'copied'
+    const count = trackIds.length
+    const already = result.alreadyThere > 0 ? ` (${result.alreadyThere} were already there)` : ''
+    return `${verb} ${count} song${count === 1 ? '' : 's'} to ${targetName.toLowerCase()}${already}`
   }
 
   const addTrack = async () => {
@@ -472,9 +563,8 @@ function App() {
       setPlaylistProgress({ current: 0, total: expected, isProcessing: true })
       pollInterval = setInterval(async () => {
         try {
-          const response = await apiFetch('/api/tracks')
-          const data = await response.json()
-          if (response.ok && data.tracks) {
+          const data = await listTracks(nucleusId)
+          if (data.tracks) {
             setTracks(data.tracks)
             const added = data.tracks.length - previousCount
             if (added > 0) {
@@ -488,7 +578,7 @@ function App() {
     }
 
     try {
-      const data = await importSongs(input)
+      const data = await importSongs(nucleusId, input)
 
       await loadTracks()
       setImportInput('')
@@ -523,16 +613,7 @@ function App() {
 
   const deleteTrack = async (id: number) => {
     try {
-      const response = await apiFetch('/api/tracks', {
-        method: 'DELETE',
-        body: JSON.stringify({ id }),
-      })
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data.error || 'Failed to remove track')
-      }
-
-      setTracks(prev => prev.filter(t => t.id !== id))
+      await handleRemoveTracks([id])
     } catch (error) {
       console.error('Failed to delete track:', error)
     }
@@ -540,11 +621,7 @@ function App() {
 
   const renameNucleus = async () => {
     try {
-      const response = await apiFetch('/api/nucleus/rename', {
-        method: 'POST',
-      })
-
-      const data = await response.json()
+      const data = await autoNameNucleus(nucleusId)
       if (data.name) {
         setNucleusName(data.name)
       }
@@ -615,8 +692,113 @@ function App() {
     ? tracksByOrbit[selectedOrbit - 1] || []
     : sortedTracks
 
+  const switchView = (next: View) => {
+    setSelectedTrack(null)
+    setShowSwitchConfirm(false)
+    setIsChatOpen(false)
+    setSelectedOrbit(null)
+    setView(next)
+  }
+
+  const toggleChat = () => {
+    const nextOpen = !isChatOpen
+    setIsChatOpen(nextOpen)
+    if (view !== 'galaxy') return
+    if (nextOpen) {
+      setSelectedTrack(null)
+      setShowSwitchConfirm(false)
+      visualizationRef.current?.zoomToNucleus()
+    } else {
+      visualizationRef.current?.resetCamera()
+    }
+  }
+
+  if (notFound) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-black px-6 text-center font-mono text-white">
+        <PulseDot size={8} />
+        <h1 className="text-lg font-semibold">this nucleus doesn't exist</h1>
+        <p className="max-w-sm text-xs text-white/50">It may have been deleted, or it belongs to another account.</p>
+        <Link to="/app" className={primaryButtonClass}>
+          back to your nuclei
+        </Link>
+      </div>
+    )
+  }
+
+  const canCreateNucleus = !isAnonymous && nucleusCount < MAX_NUCLEI
+
   return (
     <div className="nucleus-container">
+      {/* Header: back to the library, the nucleus name (click to rename) and the view toggle */}
+      <div
+        className={`fixed left-4 top-4 z-50 flex max-w-[calc(100%-2rem)] flex-wrap items-center gap-2 font-mono transition-[right] duration-300 ${
+          sidebarCollapsed ? 'right-16' : 'right-16 md:right-[368px]'
+        } pointer-events-none`}
+      >
+        <Link
+          to="/app"
+          className="pointer-events-auto flex h-8 items-center gap-1.5 border border-white/30 bg-black/80 px-2.5 text-[10px] uppercase tracking-[0.15em] text-white/60 hover:border-white/60 hover:text-white"
+          title="All your nuclei"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> nuclei
+        </Link>
+        <div className="pointer-events-auto flex h-8 min-w-0 items-center border border-white/30 bg-black/80 px-2.5">
+          {editingName !== null ? (
+            <input
+              autoFocus
+              value={editingName}
+              maxLength={80}
+              onChange={(e) => setEditingName(e.target.value)}
+              onBlur={saveName}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveName()
+                if (e.key === 'Escape') setEditingName(null)
+              }}
+              className="w-48 bg-transparent text-xs text-white focus:outline-none"
+              aria-label="Nucleus name"
+            />
+          ) : (
+            <button
+              onClick={() => setEditingName(nucleusName)}
+              className="truncate text-xs font-semibold text-white hover:text-white/80"
+              title="Rename"
+            >
+              {nucleusName.toLowerCase()}
+            </button>
+          )}
+          <span className="ml-2 shrink-0 text-[10px] text-white/40">{tracks.length} songs</span>
+        </div>
+        <div className="pointer-events-auto flex h-8 border border-white/30 bg-black/80" role="group" aria-label="View">
+          {(
+            [
+              ['galaxy', Orbit],
+              ['list', List],
+            ] as const
+          ).map(([option, Icon]) => (
+            <button
+              key={option}
+              onClick={() => switchView(option)}
+              aria-pressed={view === option}
+              className={`flex items-center gap-1.5 px-2.5 text-[10px] uppercase tracking-[0.15em] transition-colors ${
+                view === option ? 'bg-white text-black' : 'text-white/60 hover:text-white'
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" /> {option}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={toggleChat}
+          aria-pressed={isChatOpen}
+          className={`pointer-events-auto flex h-8 items-center gap-1.5 border px-2.5 text-[10px] uppercase tracking-[0.15em] transition-colors ${
+            isChatOpen ? 'border-white bg-white text-black' : 'border-white/30 bg-black/80 text-white/60 hover:border-white/60 hover:text-white'
+          }`}
+        >
+          <Sparkles className="h-3.5 w-3.5" /> talk to it
+        </button>
+      </div>
+
       {/* Sidebar toggle button */}
       <button
         onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -627,28 +809,42 @@ function App() {
         {sidebarCollapsed ? <PanelRightOpen className="w-4 h-4" /> : <PanelRightClose className="w-4 h-4" />}
       </button>
 
-      {/* Visualization takes full screen minus sidebar width */}
+      {/* Galaxy or list, full screen minus sidebar width */}
+      {view === 'list' ? (
+        <div
+          className={`fixed inset-0 overflow-y-auto bg-black transition-[right] duration-300 ${sidebarCollapsed ? 'right-0' : 'right-80'} ${
+            playingTrack || isLoadingVideo ? 'pb-24' : 'pb-8'
+          }`}
+        >
+          <div className="mx-auto max-w-5xl px-4 pt-20 sm:px-6">
+            <TrackListView
+              tracks={tracks}
+              otherNuclei={otherNuclei}
+              canOrganize={!isAnonymous}
+              canCreateNucleus={canCreateNucleus}
+              playingTrackId={playingTrack?.id ?? null}
+              isPlaying={isPlaying}
+              onPlay={playTrack}
+              onTogglePlayback={togglePlayback}
+              onRemove={handleRemoveTracks}
+              onTransfer={handleTransfer}
+              onSaveWithGoogle={() => saveWithGoogle().catch((err) => setError(err instanceof Error ? err.message : 'Could not open Google'))}
+            />
+          </div>
+        </div>
+      ) : (
       <div className={`fixed inset-0 transition-[right] duration-300 ${sidebarCollapsed ? 'right-0' : 'right-80'}`}>
         <NucleusVisualization
           ref={visualizationRef}
           tracks={tracks}
           onOrbitClick={handleOrbitClick}
           onTrackClick={handleTrackClick}
-          onNucleusClick={() => {
-            const nextOpen = !isChatOpen
-            setIsChatOpen(nextOpen)
-            if (nextOpen) {
-              setSelectedTrack(null)
-              setShowSwitchConfirm(false)
-              visualizationRef.current?.zoomToNucleus()
-            } else {
-              visualizationRef.current?.resetCamera()
-            }
-          }}
+          onNucleusClick={toggleChat}
           isAudioPlaying={isPlaying}
           audioEnergy={playingTrack?.energy ?? undefined}
         />
       </div>
+      )}
 
       {/* Sidebar */}
       <div className={`fixed top-0 w-80 h-screen bg-black border-l border-white/20 overflow-y-auto z-40 transition-[right] duration-300 ${sidebarCollapsed ? '-right-80' : 'right-0'}`}>
@@ -701,6 +897,12 @@ function App() {
             )}
           </div>
 
+          {view === 'list' ? (
+            <p className="text-xs text-white/40 font-mono">
+              Managing songs in the list. Switch back to the galaxy to see them in orbit.
+            </p>
+          ) : (
+          <>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold flex items-center gap-2 text-white font-mono">
               <Sparkles className="w-5 h-5" />
@@ -783,6 +985,8 @@ function App() {
               <p className="text-white">No tracks yet</p>
               <p className="text-sm mt-2">Add a Spotify track to begin</p>
             </div>
+          )}
+          </>
           )}
         </div>
       </div>
@@ -1099,11 +1303,12 @@ function App() {
       {/* Nucleus Chat */}
       <NucleusChat
         ref={nucleusChatRef}
+        nucleusId={nucleusId}
         nucleusName={nucleusName}
         isOpen={isChatOpen}
         onClose={() => {
           setIsChatOpen(false)
-          visualizationRef.current?.resetCamera()
+          if (view === 'galaxy') visualizationRef.current?.resetCamera()
         }}
         sidebarCollapsed={sidebarCollapsed}
       />

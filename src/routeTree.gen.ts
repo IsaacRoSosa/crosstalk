@@ -10,29 +10,28 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AppRouteImport } from './routes/app'
 import { Route as ExampleRouteImport } from './routes/example'
 import { Route as StartRouteImport } from './routes/start'
 import { Route as AiCallbackRouteImport } from './routes/ai/callback'
+import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as ApiAccountMergeRouteImport } from './routes/api/account/merge'
 import { Route as ApiAiConnectionRouteImport } from './routes/api/ai/connection'
 import { Route as ApiChatIndexRouteImport } from './routes/api/chat/index'
 import { Route as ApiChatMessageRouteImport } from './routes/api/chat/message'
-import { Route as ApiNucleusRenameRouteImport } from './routes/api/nucleus/rename'
+import { Route as ApiNucleiIndexRouteImport } from './routes/api/nuclei/index'
 import { Route as ApiTracksIndexRouteImport } from './routes/api/tracks/index'
 import { Route as ApiTracksImportRouteImport } from './routes/api/tracks/import'
+import { Route as ApiTracksTransferRouteImport } from './routes/api/tracks/transfer'
 import { Route as ApiTracksVideoRouteImport } from './routes/api/tracks/video'
+import { Route as AppNNucleusIdRouteImport } from './routes/app/n/$nucleusId'
 import { Route as ApiAiOpenrouterExchangeRouteImport } from './routes/api/ai/openrouter/exchange'
+import { Route as ApiNucleiNucleusIdIndexRouteImport } from './routes/api/nuclei/$nucleusId/index'
+import { Route as ApiNucleiNucleusIdNameRouteImport } from './routes/api/nuclei/$nucleusId/name'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppRoute = AppRouteImport.update({
-  id: '/app',
-  path: '/app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExampleRoute = ExampleRouteImport.update({
@@ -48,6 +47,11 @@ const StartRoute = StartRouteImport.update({
 const AiCallbackRoute = AiCallbackRouteImport.update({
   id: '/ai/callback',
   path: '/ai/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/app/',
+  path: '/app/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
@@ -75,9 +79,9 @@ const ApiChatMessageRoute = ApiChatMessageRouteImport.update({
   path: '/api/chat/message',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiNucleusRenameRoute = ApiNucleusRenameRouteImport.update({
-  id: '/api/nucleus/rename',
-  path: '/api/nucleus/rename',
+const ApiNucleiIndexRoute = ApiNucleiIndexRouteImport.update({
+  id: '/api/nuclei/',
+  path: '/api/nuclei/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiTracksIndexRoute = ApiTracksIndexRouteImport.update({
@@ -90,9 +94,19 @@ const ApiTracksImportRoute = ApiTracksImportRouteImport.update({
   path: '/api/tracks/import',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTracksTransferRoute = ApiTracksTransferRouteImport.update({
+  id: '/api/tracks/transfer',
+  path: '/api/tracks/transfer',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiTracksVideoRoute = ApiTracksVideoRouteImport.update({
   id: '/api/tracks/video',
   path: '/api/tracks/video',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppNNucleusIdRoute = AppNNucleusIdRouteImport.update({
+  id: '/app/n/$nucleusId',
+  path: '/app/n/$nucleusId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAiOpenrouterExchangeRoute = ApiAiOpenrouterExchangeRouteImport.update({
@@ -100,129 +114,167 @@ const ApiAiOpenrouterExchangeRoute = ApiAiOpenrouterExchangeRouteImport.update({
   path: '/api/ai/openrouter/exchange',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiNucleiNucleusIdIndexRoute = ApiNucleiNucleusIdIndexRouteImport.update({
+  id: '/api/nuclei/$nucleusId/',
+  path: '/api/nuclei/$nucleusId/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiNucleiNucleusIdNameRoute = ApiNucleiNucleusIdNameRouteImport.update({
+  id: '/api/nuclei/$nucleusId/name',
+  path: '/api/nuclei/$nucleusId/name',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/app': typeof AppRoute
   '/example': typeof ExampleRoute
   '/start': typeof StartRoute
   '/ai/callback': typeof AiCallbackRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/app/': typeof AppIndexRoute
   '/api/account/merge': typeof ApiAccountMergeRoute
   '/api/ai/connection': typeof ApiAiConnectionRoute
   '/api/chat/message': typeof ApiChatMessageRoute
-  '/api/nucleus/rename': typeof ApiNucleusRenameRoute
   '/api/tracks/import': typeof ApiTracksImportRoute
+  '/api/tracks/transfer': typeof ApiTracksTransferRoute
   '/api/tracks/video': typeof ApiTracksVideoRoute
+  '/app/n/$nucleusId': typeof AppNNucleusIdRoute
   '/api/chat/': typeof ApiChatIndexRoute
+  '/api/nuclei/': typeof ApiNucleiIndexRoute
   '/api/tracks/': typeof ApiTracksIndexRoute
   '/api/ai/openrouter/exchange': typeof ApiAiOpenrouterExchangeRoute
+  '/api/nuclei/$nucleusId/name': typeof ApiNucleiNucleusIdNameRoute
+  '/api/nuclei/$nucleusId/': typeof ApiNucleiNucleusIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/app': typeof AppRoute
   '/example': typeof ExampleRoute
   '/start': typeof StartRoute
   '/ai/callback': typeof AiCallbackRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/app': typeof AppIndexRoute
   '/api/account/merge': typeof ApiAccountMergeRoute
   '/api/ai/connection': typeof ApiAiConnectionRoute
   '/api/chat/message': typeof ApiChatMessageRoute
-  '/api/nucleus/rename': typeof ApiNucleusRenameRoute
   '/api/tracks/import': typeof ApiTracksImportRoute
+  '/api/tracks/transfer': typeof ApiTracksTransferRoute
   '/api/tracks/video': typeof ApiTracksVideoRoute
+  '/app/n/$nucleusId': typeof AppNNucleusIdRoute
   '/api/chat': typeof ApiChatIndexRoute
+  '/api/nuclei': typeof ApiNucleiIndexRoute
   '/api/tracks': typeof ApiTracksIndexRoute
   '/api/ai/openrouter/exchange': typeof ApiAiOpenrouterExchangeRoute
+  '/api/nuclei/$nucleusId/name': typeof ApiNucleiNucleusIdNameRoute
+  '/api/nuclei/$nucleusId': typeof ApiNucleiNucleusIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/app': typeof AppRoute
   '/example': typeof ExampleRoute
   '/start': typeof StartRoute
   '/ai/callback': typeof AiCallbackRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/app/': typeof AppIndexRoute
   '/api/account/merge': typeof ApiAccountMergeRoute
   '/api/ai/connection': typeof ApiAiConnectionRoute
   '/api/chat/message': typeof ApiChatMessageRoute
-  '/api/nucleus/rename': typeof ApiNucleusRenameRoute
   '/api/tracks/import': typeof ApiTracksImportRoute
+  '/api/tracks/transfer': typeof ApiTracksTransferRoute
   '/api/tracks/video': typeof ApiTracksVideoRoute
+  '/app/n/$nucleusId': typeof AppNNucleusIdRoute
   '/api/chat/': typeof ApiChatIndexRoute
+  '/api/nuclei/': typeof ApiNucleiIndexRoute
   '/api/tracks/': typeof ApiTracksIndexRoute
   '/api/ai/openrouter/exchange': typeof ApiAiOpenrouterExchangeRoute
+  '/api/nuclei/$nucleusId/name': typeof ApiNucleiNucleusIdNameRoute
+  '/api/nuclei/$nucleusId/': typeof ApiNucleiNucleusIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/app'
     | '/example'
     | '/start'
     | '/ai/callback'
     | '/auth/callback'
+    | '/app/'
     | '/api/account/merge'
     | '/api/ai/connection'
     | '/api/chat/message'
-    | '/api/nucleus/rename'
     | '/api/tracks/import'
+    | '/api/tracks/transfer'
     | '/api/tracks/video'
+    | '/app/n/$nucleusId'
     | '/api/chat/'
+    | '/api/nuclei/'
     | '/api/tracks/'
     | '/api/ai/openrouter/exchange'
+    | '/api/nuclei/$nucleusId/name'
+    | '/api/nuclei/$nucleusId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/app'
     | '/example'
     | '/start'
     | '/ai/callback'
     | '/auth/callback'
+    | '/app'
     | '/api/account/merge'
     | '/api/ai/connection'
     | '/api/chat/message'
-    | '/api/nucleus/rename'
     | '/api/tracks/import'
+    | '/api/tracks/transfer'
     | '/api/tracks/video'
+    | '/app/n/$nucleusId'
     | '/api/chat'
+    | '/api/nuclei'
     | '/api/tracks'
     | '/api/ai/openrouter/exchange'
+    | '/api/nuclei/$nucleusId/name'
+    | '/api/nuclei/$nucleusId'
   id:
     | '__root__'
     | '/'
-    | '/app'
     | '/example'
     | '/start'
     | '/ai/callback'
     | '/auth/callback'
+    | '/app/'
     | '/api/account/merge'
     | '/api/ai/connection'
     | '/api/chat/message'
-    | '/api/nucleus/rename'
     | '/api/tracks/import'
+    | '/api/tracks/transfer'
     | '/api/tracks/video'
+    | '/app/n/$nucleusId'
     | '/api/chat/'
+    | '/api/nuclei/'
     | '/api/tracks/'
     | '/api/ai/openrouter/exchange'
+    | '/api/nuclei/$nucleusId/name'
+    | '/api/nuclei/$nucleusId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AppRoute: typeof AppRoute
   ExampleRoute: typeof ExampleRoute
   StartRoute: typeof StartRoute
   AiCallbackRoute: typeof AiCallbackRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  AppIndexRoute: typeof AppIndexRoute
   ApiAccountMergeRoute: typeof ApiAccountMergeRoute
   ApiAiConnectionRoute: typeof ApiAiConnectionRoute
   ApiChatMessageRoute: typeof ApiChatMessageRoute
-  ApiNucleusRenameRoute: typeof ApiNucleusRenameRoute
   ApiTracksImportRoute: typeof ApiTracksImportRoute
+  ApiTracksTransferRoute: typeof ApiTracksTransferRoute
   ApiTracksVideoRoute: typeof ApiTracksVideoRoute
+  AppNNucleusIdRoute: typeof AppNNucleusIdRoute
   ApiChatIndexRoute: typeof ApiChatIndexRoute
+  ApiNucleiIndexRoute: typeof ApiNucleiIndexRoute
   ApiTracksIndexRoute: typeof ApiTracksIndexRoute
   ApiAiOpenrouterExchangeRoute: typeof ApiAiOpenrouterExchangeRoute
+  ApiNucleiNucleusIdNameRoute: typeof ApiNucleiNucleusIdNameRoute
+  ApiNucleiNucleusIdIndexRoute: typeof ApiNucleiNucleusIdIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -232,13 +284,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/app': {
-      id: '/app'
-      path: '/app'
-      fullPath: '/app'
-      preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/example': {
@@ -260,6 +305,13 @@ declare module '@tanstack/react-router' {
       path: '/ai/callback'
       fullPath: '/ai/callback'
       preLoaderRoute: typeof AiCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/': {
+      id: '/app/'
+      path: '/app'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/callback': {
@@ -297,11 +349,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatMessageRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/nucleus/rename': {
-      id: '/api/nucleus/rename'
-      path: '/api/nucleus/rename'
-      fullPath: '/api/nucleus/rename'
-      preLoaderRoute: typeof ApiNucleusRenameRouteImport
+    '/api/nuclei/': {
+      id: '/api/nuclei/'
+      path: '/api/nuclei'
+      fullPath: '/api/nuclei/'
+      preLoaderRoute: typeof ApiNucleiIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/tracks/': {
@@ -318,11 +370,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTracksImportRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/tracks/transfer': {
+      id: '/api/tracks/transfer'
+      path: '/api/tracks/transfer'
+      fullPath: '/api/tracks/transfer'
+      preLoaderRoute: typeof ApiTracksTransferRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/tracks/video': {
       id: '/api/tracks/video'
       path: '/api/tracks/video'
       fullPath: '/api/tracks/video'
       preLoaderRoute: typeof ApiTracksVideoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/n/$nucleusId': {
+      id: '/app/n/$nucleusId'
+      path: '/app/n/$nucleusId'
+      fullPath: '/app/n/$nucleusId'
+      preLoaderRoute: typeof AppNNucleusIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/ai/openrouter/exchange': {
@@ -332,25 +398,43 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiOpenrouterExchangeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/nuclei/$nucleusId/': {
+      id: '/api/nuclei/$nucleusId/'
+      path: '/api/nuclei/$nucleusId'
+      fullPath: '/api/nuclei/$nucleusId/'
+      preLoaderRoute: typeof ApiNucleiNucleusIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/nuclei/$nucleusId/name': {
+      id: '/api/nuclei/$nucleusId/name'
+      path: '/api/nuclei/$nucleusId/name'
+      fullPath: '/api/nuclei/$nucleusId/name'
+      preLoaderRoute: typeof ApiNucleiNucleusIdNameRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AppRoute: AppRoute,
   ExampleRoute: ExampleRoute,
   StartRoute: StartRoute,
   AiCallbackRoute: AiCallbackRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  AppIndexRoute: AppIndexRoute,
   ApiAccountMergeRoute: ApiAccountMergeRoute,
   ApiAiConnectionRoute: ApiAiConnectionRoute,
   ApiChatMessageRoute: ApiChatMessageRoute,
-  ApiNucleusRenameRoute: ApiNucleusRenameRoute,
   ApiTracksImportRoute: ApiTracksImportRoute,
+  ApiTracksTransferRoute: ApiTracksTransferRoute,
   ApiTracksVideoRoute: ApiTracksVideoRoute,
+  AppNNucleusIdRoute: AppNNucleusIdRoute,
   ApiChatIndexRoute: ApiChatIndexRoute,
+  ApiNucleiIndexRoute: ApiNucleiIndexRoute,
   ApiTracksIndexRoute: ApiTracksIndexRoute,
   ApiAiOpenrouterExchangeRoute: ApiAiOpenrouterExchangeRoute,
+  ApiNucleiNucleusIdNameRoute: ApiNucleiNucleusIdNameRoute,
+  ApiNucleiNucleusIdIndexRoute: ApiNucleiNucleusIdIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
