@@ -39,3 +39,33 @@ code {
 .delay-150 {
   animation-delay: 150ms;
 }
+
+/* Shared look for the landing and onboarding screens (from the Crosstalk flow prototype) */
+@keyframes lidarPulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 10px #fff, 0 0 20px #fff; }
+  50% { opacity: 0.6; box-shadow: 0 0 5px #fff, 0 0 10px #fff; }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ct-pulse-dot {
+  border-radius: 9999px;
+  background: #fff;
+  animation: lidarPulse 1s ease-in-out infinite;
+}
+
+.ct-scanlines {
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255, 255, 255, 0.03) 2px, rgba(255, 255, 255, 0.03) 4px);
+  pointer-events: none;
+}
+
+.ct-fade-up {
+  animation: fadeUp 0.5s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ct-pulse-dot, .ct-fade-up { animation: none; }
+}

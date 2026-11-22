@@ -8,6 +8,7 @@ import { apiFetch } from './api-client'
 
 const VERIFIER_KEY = 'crosstalk.openrouter.verifier'
 const STATE_KEY = 'crosstalk.openrouter.state'
+const RETURN_TO_KEY = 'crosstalk.openrouter.returnTo'
 // Smallest spend limit OpenRouter accepts (0 is treated as "no limit"). Crosstalk only calls
 // free models, so this only matters if a stored key were ever stolen.
 const SPEND_LIMIT_USD = '0.01'
@@ -27,11 +28,13 @@ async function sha256Base64url(text: string): Promise<string> {
   return base64url(new Uint8Array(digest))
 }
 
-export async function startOpenRouterConnect(): Promise<void> {
+// `returnTo`: the page to come back to once connected (defaults to the app)
+export async function startOpenRouterConnect(returnTo = '/app'): Promise<void> {
   const verifier = randomString(32)
   const state = randomString(16)
   sessionStorage.setItem(VERIFIER_KEY, verifier)
   sessionStorage.setItem(STATE_KEY, state)
+  sessionStorage.setItem(RETURN_TO_KEY, returnTo)
 
   const params = new URLSearchParams({
     callback_url: `${window.location.origin}/ai/callback`,
@@ -44,11 +47,14 @@ export async function startOpenRouterConnect(): Promise<void> {
   window.location.assign(`https://openrouter.ai/auth?${params}`)
 }
 
-export async function completeOpenRouterConnect(code: string, state: string | null): Promise<void> {
+// Returns the path to go back to
+export async function completeOpenRouterConnect(code: string, state: string | null): Promise<string> {
   const verifier = sessionStorage.getItem(VERIFIER_KEY)
   const expectedState = sessionStorage.getItem(STATE_KEY)
+  const returnTo = sessionStorage.getItem(RETURN_TO_KEY)
   sessionStorage.removeItem(VERIFIER_KEY)
   sessionStorage.removeItem(STATE_KEY)
+  sessionStorage.removeItem(RETURN_TO_KEY)
 
   if (!verifier) {
     throw new Error('This connection link has already been used or expired. Please connect again.')
@@ -66,4 +72,6 @@ export async function completeOpenRouterConnect(code: string, state: string | nu
     const data = await response.json().catch(() => ({}))
     throw new Error(data.error || 'Could not connect OpenRouter. Please try again.')
   }
+  // Only same-site paths, never a full URL
+  return returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/app'
 }

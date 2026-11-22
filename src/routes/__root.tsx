@@ -15,8 +15,14 @@ export const Route = createRootRoute({
         content: 'width=device-width, initial-scale=1',
       },
       {
-        title: 'Crosstalk',
+        title: 'Crosstalk · how much of you is in your library?',
       },
+      {
+        name: 'description',
+        content:
+          'Crosstalk reads the lyrics of the songs you keep coming back to and builds a nucleus: a first impression of you, before anyone says a word.',
+      },
+      { name: 'theme-color', content: '#000000' },
     ],
     links: [
       {

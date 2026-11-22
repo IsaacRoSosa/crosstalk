@@ -43,12 +43,12 @@ function AuthCallback() {
           throw new Error(error?.message ?? 'Google sign-in did not complete.')
         }
         await mergePendingAnonymousAccount()
-        navigate({ to: '/', replace: true })
+        navigate({ to: '/app', replace: true })
       })
       .catch((err: unknown) => setState({ kind: 'error', message: err instanceof Error ? err.message : 'Google sign-in failed.' }))
   }, [navigate])
 
-  const goHome = () => navigate({ to: '/', replace: true })
+  const goHome = () => navigate({ to: '/app', replace: true })
 
   return (
     <div className="min-h-screen bg-black text-white flex items-center justify-center p-6 font-mono">

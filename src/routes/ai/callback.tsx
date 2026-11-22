@@ -23,7 +23,8 @@ function OpenRouterCallback() {
     }
 
     completeOpenRouterConnect(code, params.get('state'))
-      .then(() => navigate({ to: '/', replace: true }))
+      // returnTo is a same-site path that may carry a query (e.g. /start?step=forming)
+      .then((returnTo) => window.location.replace(returnTo))
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not connect OpenRouter.'))
   }, [navigate])
 
@@ -34,7 +35,7 @@ function OpenRouterCallback() {
           <>
             <p className="mb-4">{error}</p>
             <button
-              onClick={() => navigate({ to: '/', replace: true })}
+              onClick={() => navigate({ to: '/app', replace: true })}
               className="px-3 py-2 bg-white text-black hover:bg-gray-200 font-semibold"
             >
               Back to Crosstalk

@@ -10,6 +10,9 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRouteImport } from './routes/app'
+import { Route as ExampleRouteImport } from './routes/example'
+import { Route as StartRouteImport } from './routes/start'
 import { Route as AiCallbackRouteImport } from './routes/ai/callback'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as ApiAccountMergeRouteImport } from './routes/api/account/merge'
@@ -25,6 +28,21 @@ import { Route as ApiAiOpenrouterExchangeRouteImport } from './routes/api/ai/ope
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRoute = AppRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExampleRoute = ExampleRouteImport.update({
+  id: '/example',
+  path: '/example',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StartRoute = StartRouteImport.update({
+  id: '/start',
+  path: '/start',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AiCallbackRoute = AiCallbackRouteImport.update({
@@ -85,6 +103,9 @@ const ApiAiOpenrouterExchangeRoute = ApiAiOpenrouterExchangeRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/app': typeof AppRoute
+  '/example': typeof ExampleRoute
+  '/start': typeof StartRoute
   '/ai/callback': typeof AiCallbackRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/api/account/merge': typeof ApiAccountMergeRoute
@@ -99,6 +120,9 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/app': typeof AppRoute
+  '/example': typeof ExampleRoute
+  '/start': typeof StartRoute
   '/ai/callback': typeof AiCallbackRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/api/account/merge': typeof ApiAccountMergeRoute
@@ -114,6 +138,9 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/app': typeof AppRoute
+  '/example': typeof ExampleRoute
+  '/start': typeof StartRoute
   '/ai/callback': typeof AiCallbackRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/api/account/merge': typeof ApiAccountMergeRoute
@@ -130,6 +157,9 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/app'
+    | '/example'
+    | '/start'
     | '/ai/callback'
     | '/auth/callback'
     | '/api/account/merge'
@@ -144,6 +174,9 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/app'
+    | '/example'
+    | '/start'
     | '/ai/callback'
     | '/auth/callback'
     | '/api/account/merge'
@@ -158,6 +191,9 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/app'
+    | '/example'
+    | '/start'
     | '/ai/callback'
     | '/auth/callback'
     | '/api/account/merge'
@@ -173,6 +209,9 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRoute
+  ExampleRoute: typeof ExampleRoute
+  StartRoute: typeof StartRoute
   AiCallbackRoute: typeof AiCallbackRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   ApiAccountMergeRoute: typeof ApiAccountMergeRoute
@@ -193,6 +232,27 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/example': {
+      id: '/example'
+      path: '/example'
+      fullPath: '/example'
+      preLoaderRoute: typeof ExampleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/start': {
+      id: '/start'
+      path: '/start'
+      fullPath: '/start'
+      preLoaderRoute: typeof StartRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ai/callback': {
@@ -277,6 +337,9 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRoute: AppRoute,
+  ExampleRoute: ExampleRoute,
+  StartRoute: StartRoute,
   AiCallbackRoute: AiCallbackRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   ApiAccountMergeRoute: ApiAccountMergeRoute,
