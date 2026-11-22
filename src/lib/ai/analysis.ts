@@ -8,7 +8,7 @@ import { chatCompletion, type ChatMessage } from './openrouter'
 import { ADDRESSEES, EMOTIONS, STANCES, oneOf, type Addressee, type Emotion, type Stance } from '../../types/track'
 
 // Bump when the song prompt changes in a way worth re-reading old songs for (see track-pipeline.ts)
-export const ANALYSIS_VERSION = 2
+export const ANALYSIS_VERSION = 3
 
 export interface LyricsAnalysis {
   emotion: Emotion
@@ -18,7 +18,7 @@ export interface LyricsAnalysis {
   addressee: Addressee | null
   stance: Stance | null
   themes: string[]
-  // One short line on what the song is really doing
+  // A few sentences: what the song is doing, the feeling under it and what it's trying to say
   take: string
   // A few words on how it's written
   style: string
@@ -68,18 +68,19 @@ Reply with only this JSON, nothing else:
   "addressee": "who the singer is talking to. one of: ${ADDRESSEES.join(', ')}",
   "stance": "the singer's attitude. one of: ${STANCES.join(', ')}",
   "themes": ["2 or 3 short lowercase themes, 1 to 3 words each"],
-  "take": "one sentence, at most 18 words, saying what the song is doing",
+  "take": "2 or 3 sentences, 35 to 60 words: what the song is doing, then the feeling under it and what the singer is really trying to get across",
   "style": "2 to 4 short lowercase descriptors of how it's written, comma separated",
   "genre": "the genre, 1 to 3 lowercase words"
 }
 
 How to write "take":
+- first say what's going on in the song. then go under it: the feeling it lives in, what the singer wants you to understand or feel, what it's like to have it on repeat.
 - plain and specific, like you'd tell a friend. lowercase. no exclamation marks.
 - never start with "the song", "the lyrics", "this track", or the title. never quote the lyrics.
 - don't use: ${AI_TELLS.join(', ')}
-- good: "a breakup song that's mostly about not wanting to be the one who cares more"
-- good: "bragging on the surface, but every verse circles back to feeling left out"
-- good: "pure crush energy, the kind where you rehearse texts you'll never send"
+- good: "a breakup song that's mostly about not wanting to be the one who cares more. under the cool act there's real panic: they'd rather pretend it never mattered than admit they're still waiting for a text."
+- good: "bragging on the surface, but every verse circles back to feeling left out. the flexing is armor, and what it really wants you to hear is how lonely it got on the way up."
+- good: "pure crush energy, the kind where you rehearse texts you'll never send. it's giddy and a little embarrassing, and it wants you to remember how big a small hello can feel."
 - bad: "The lyrics convey a poignant exploration of love and loss."`
 
 // Free models are long-context, but there's no need to send an entire 10-minute epic
@@ -116,7 +117,7 @@ function parseAnalysis(text: string): Omit<LyricsAnalysis, 'model'> | null {
   const raw = extractJson(text)
   if (!raw) return null
   const emotion = oneOf(EMOTIONS, raw.emotion)
-  const take = cleanLine(raw.take ?? raw.mood_description, 240)
+  const take = cleanLine(raw.take ?? raw.mood_description, 480)
   if (!emotion || !take) return null
   const secondary = oneOf(EMOTIONS, raw.secondary_emotion)
   const themes = (Array.isArray(raw.themes) ? raw.themes : [])
