@@ -15,7 +15,8 @@ const config = defineConfig({
     },
   },
   plugins: [
-    devtools(),
+    // enhancedLogs prefixes every server console.log with a source link, which buries our own logs
+    devtools({ enhancedLogs: { enabled: false } }),
     nitro(),
     // this is the plugin that enables path aliases
     viteTsConfigPaths({
