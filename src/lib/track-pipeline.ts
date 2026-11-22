@@ -5,7 +5,8 @@ import { HttpError } from './http'
 import { requireEnv } from './env'
 import { fetchSpotifyMetadata } from './spotify'
 import { fetchDeezerTrack, type DeezerTrack } from './deezer'
-import { searchGeniusLyrics } from './genius'
+import { findGeniusSongUrl } from './genius'
+import { findLyrics } from './lrclib'
 import { analyzeLyricsWithRotation, getGeminiApiKeys } from './gemini'
 import {
   addTrackToNucleus,
@@ -82,10 +83,24 @@ async function analyzeCandidate(candidate: TrackCandidate, existingId?: number):
   const label = `${candidate.title} - ${candidate.artist}`
   log.info('pipeline', 'analyzing new track', { track: label, spotifyId: candidate.spotify_id, deezerId: candidate.deezer_id })
 
-  const lyricsResult = await searchGeniusLyrics(candidate.title, candidate.artist, requireEnv('GENIUS_ACCESS_TOKEN'))
+  const [lyricsResult, geniusUrl] = await Promise.all([
+    findLyrics({
+      title: candidate.title,
+      artist: candidate.artist,
+      album: candidate.album,
+      durationMs: candidate.duration_ms,
+    }),
+    findGeniusSongUrl(candidate.title, candidate.artist, process.env.GENIUS_ACCESS_TOKEN),
+  ])
   if (!lyricsResult.lyrics) {
     log.warn('pipeline', 'skipping track without lyrics', { track: label, reason: lyricsResult.reason })
-    throw new HttpError(422, 'No lyrics found for this track. Unable to analyze emotion.', {
+    const message =
+      lyricsResult.reason === 'instrumental'
+        ? 'This track is instrumental, so there are no lyrics to analyze.'
+        : lyricsResult.reason === 'lyrics_service_failed'
+          ? "Couldn't reach the lyrics service. Please try again."
+          : 'No lyrics found for this track. Unable to analyze emotion.'
+    throw new HttpError(lyricsResult.reason === 'lyrics_service_failed' ? 502 : 422, message, {
       reason: lyricsResult.reason,
     })
   }
@@ -107,7 +122,7 @@ async function analyzeCandidate(candidate: TrackCandidate, existingId?: number):
     getAdminClient(),
     {
       ...candidate,
-      genius_url: lyricsResult.url,
+      genius_url: geniusUrl,
       emotion,
       valence: clamp01(analysis.valence),
       energy: clamp01(analysis.energy),

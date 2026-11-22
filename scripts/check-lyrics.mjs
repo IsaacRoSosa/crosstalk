@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Diagnoses lyrics lookup step by step for one song: Genius search API, the Genius song page
-// (with and without browser-like headers) and LRCLIB, a free lyrics API, for comparison.
+// Diagnoses lyrics lookup for one song: LRCLIB (the app's lyrics source), plus the Genius search API
+// (used for the "View lyrics" link) and the Genius song page, which Genius blocks (403 + Cloudflare).
 //
 // Usage (Node 20.6+):
 //   node --env-file=.env scripts/check-lyrics.mjs "Song title" "Artist"
@@ -79,12 +79,25 @@ if (songUrl) {
   }
 }
 
-// 3. LRCLIB (free lyrics API, no key)
+// 3. LRCLIB (free lyrics API, no key): the app's lyrics source
+const LRCLIB_HEADERS = { 'User-Agent': 'Crosstalk/0.1 (https://github.com/IsaacRoSosa/crosstalk)' }
 {
   const params = new URLSearchParams({ track_name: title, artist_name: artist })
-  const { status, text } = await safeFetch(`https://lrclib.net/api/search?${params}`, {
-    headers: { 'User-Agent': 'Crosstalk lyrics check (https://github.com/IsaacRoSosa/crosstalk)' },
-  })
+  const { status, text } = await safeFetch(`https://lrclib.net/api/get?${params}`, { headers: LRCLIB_HEADERS })
+  if (status === 200) {
+    const found = JSON.parse(text)
+    record(
+      'LRCLIB get',
+      found.plainLyrics ? 'OK' : 'FAIL',
+      found.instrumental ? 'instrumental' : `"${found.trackName}" - ${found.artistName} | ${found.plainLyrics?.length ?? 0} characters`,
+    )
+  } else {
+    record('LRCLIB get', status === 404 ? 'MISS' : 'FAIL', `HTTP ${status} (the app then tries search)`)
+  }
+}
+{
+  const params = new URLSearchParams({ track_name: title, artist_name: artist })
+  const { status, text } = await safeFetch(`https://lrclib.net/api/search?${params}`, { headers: LRCLIB_HEADERS })
   if (status !== 200) {
     record('LRCLIB search', 'FAIL', `HTTP ${status} ${text}`)
   } else {
