@@ -148,22 +148,20 @@ export async function analyzeLyrics(
     .replace('{genreHint}', song.genreHint ? `\nFiled under: ${song.genreHint}` : '')
     .replace('{lyrics}', song.lyrics.slice(0, MAX_LYRICS_CHARS))
 
-  // Free models sometimes return malformed JSON or slip into essay voice; one retry fixes most of it
-  let fallback: LyricsAnalysis | null = null
+  // Free models sometimes return malformed JSON; one retry fixes most of it. A reply that slipped into
+  // essay voice is kept (and logged) rather than retried: the free tier allows 50 requests a day, and
+  // a 30-song On Repeat import shouldn't need more than that.
   for (let attempt = 1; attempt <= 2; attempt++) {
     const { text, model } = await chatCompletion(userId, apiKey, [{ role: 'user', content: prompt }], { temperature: 0.5 })
     const analysis = parseAnalysis(text)
-    if (analysis && !soundsGenerated(analysis.take)) return { ...analysis, model }
-    if (analysis) fallback ??= { ...analysis, model }
-    log.warn('analysis', analysis ? 'take sounds generated' : 'unparseable analysis', {
-      track: `${song.title} - ${song.artist}`,
-      model,
-      attempt,
-      preview: (analysis?.take ?? text).slice(0, 200),
-    })
+    if (analysis) {
+      if (soundsGenerated(analysis.take)) {
+        log.warn('analysis', 'take sounds generated', { track: `${song.title} - ${song.artist}`, model, take: analysis.take })
+      }
+      return { ...analysis, model }
+    }
+    log.warn('analysis', 'unparseable analysis', { track: `${song.title} - ${song.artist}`, model, attempt, preview: text.slice(0, 200) })
   }
-  // Better a slightly stiff line than no song at all
-  if (fallback) return fallback
   throw new HttpError(502, 'The AI returned an unexpected analysis. Please try again.', { code: 'ai_bad_output' })
 }
 
@@ -198,6 +196,8 @@ export interface NucleusRead {
 
 export async function readNucleus(userId: string, apiKey: string, facts: string, songs: string): Promise<NucleusRead> {
   const prompt = READ_PROMPT.replace('{facts}', facts).replace('{songs}', songs)
+  // The first impression is the one thing people read closely, so here a reply in essay voice is
+  // worth one more request
   let fallback: NucleusRead | null = null
   for (let attempt = 1; attempt <= 2; attempt++) {
     const { text, model } = await chatCompletion(userId, apiKey, [{ role: 'user', content: prompt }], { temperature: 0.8 })
