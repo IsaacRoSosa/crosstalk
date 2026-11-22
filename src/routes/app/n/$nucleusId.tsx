@@ -994,6 +994,7 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
           onNucleusClick={toggleChat}
           isAudioPlaying={isPlaying}
           audioEnergy={playingTrack?.energy ?? undefined}
+          playingTrackId={playingTrack?.id ?? null}
         />
       </div>
       </>

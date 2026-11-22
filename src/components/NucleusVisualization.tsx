@@ -46,6 +46,40 @@ interface NucleusVisualizationProps {
   isAudioPlaying?: boolean
   audioEnergy?: number
   audioTempo?: number
+  // The song playing now: while it plays, the nucleus takes the color of its cover
+  playingTrackId?: number | null
+}
+
+// The nucleus is drawn in white by shaders. Each of them gets a uTint uniform that multiplies its
+// output, so the whole nucleus can take a color. Returns the uniforms to drive from the animation loop.
+function addNucleusTint(nucleus: THREE.Object3D): Array<{ value: THREE.Color }> {
+  const seen = new Set<THREE.ShaderMaterial>()
+  nucleus.traverse((child: THREE.Object3D) => {
+    const material = (child as THREE.Mesh | THREE.Points).material
+    if (material instanceof THREE.ShaderMaterial) seen.add(material)
+  })
+  const uniforms: Array<{ value: THREE.Color }> = []
+  for (const material of seen) {
+    const uniform = { value: new THREE.Color(1, 1, 1) }
+    material.uniforms.uTint = uniform
+    material.fragmentShader = `uniform vec3 uTint;\n${material.fragmentShader.replace(/\}\s*$/, '  gl_FragColor.rgb *= uTint;\n}\n')}`
+    material.needsUpdate = true
+    uniforms.push(uniform)
+  }
+  return uniforms
+}
+
+const WHITE = new THREE.Color(1, 1, 1)
+
+// A cover's dominant color, made bright enough to glow: dark or muddy covers would otherwise turn
+// the nucleus grey. Near-greyscale covers stay white.
+function nucleusTintFor(hex: string | undefined): THREE.Color {
+  if (!hex) return WHITE
+  const color = new THREE.Color(hex)
+  const hsl = { h: 0, s: 0, l: 0 }
+  color.getHSL(hsl)
+  if (hsl.s < 0.12) return WHITE
+  return new THREE.Color().setHSL(hsl.h, Math.max(hsl.s, 0.55), Math.min(Math.max(hsl.l, 0.6), 0.75))
 }
 
 // Orbit radii
@@ -163,7 +197,7 @@ export interface NucleusVisualizationHandle {
   getNucleusScreenPosition: () => { x: number; y: number } | null
 }
 
-export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, NucleusVisualizationProps>(function NucleusVisualization({ tracks, onOrbitClick, onTrackClick, onNucleusClick, isAudioPlaying, audioEnergy, audioTempo }, ref) {
+export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, NucleusVisualizationProps>(function NucleusVisualization({ tracks, onOrbitClick, onTrackClick, onNucleusClick, isAudioPlaying, audioEnergy, audioTempo, playingTrackId }, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   // Set when the browser can't create a WebGL context (hardware acceleration off, too many contexts...)
@@ -186,12 +220,15 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
   const isAudioPlayingRef = useRef(false)
   const audioEnergyRef = useRef(0.5)
   const audioTempoRef = useRef(120)
+  const playingTrackIdRef = useRef<number | null>(null)
+  const nucleusTintRef = useRef<Array<{ value: THREE.Color }>>([])
 
   useEffect(() => {
     isAudioPlayingRef.current = isAudioPlaying || false
     audioEnergyRef.current = audioEnergy ?? 0.5
     audioTempoRef.current = audioTempo ?? 120
-  }, [isAudioPlaying, audioEnergy, audioTempo])
+    playingTrackIdRef.current = playingTrackId ?? null
+  }, [isAudioPlaying, audioEnergy, audioTempo, playingTrackId])
 
   useImperativeHandle(ref, () => ({
     resetCamera: () => {
@@ -1114,8 +1151,11 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
 
     // Create nucleus
     const nucleus = createNucleus()
+    nucleusTintRef.current = addNucleusTint(nucleus)
     scene.add(nucleus)
     nucleusRef.current = nucleus
+    // Eased toward the playing song's color each frame
+    const currentTint = new THREE.Color(1, 1, 1)
 
     // Create orbital groups (rings with tilts)
     const orbitGroups: THREE.Group[] = []
@@ -1246,6 +1286,15 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
       const deltaTime = Math.min(elapsedTime - previousElapsed, 0.1)
       previousElapsed = elapsedTime
       elapsedRef.current = elapsedTime
+
+      // Nucleus color: the playing song's cover while it plays, white otherwise
+      const playingId = playingTrackIdRef.current
+      const targetTint =
+        isAudioPlayingRef.current && playingId !== null
+          ? nucleusTintFor(trackColorsRef.current.get(playingId)?.dominant)
+          : WHITE
+      currentTint.lerp(targetTint, Math.min(1, deltaTime * 2.5))
+      for (const uniform of nucleusTintRef.current) uniform.value.copy(currentTint)
 
       // Animate nucleus: 3D diffraction spike core + spikes
       if (nucleusRef.current) {
