@@ -7,6 +7,7 @@ import { NucleusChat } from '../../../components/NucleusChat'
 import { AiConnectionPanel } from '../../../components/AiConnectionPanel'
 import { AccountPanel } from '../../../components/AccountPanel'
 import { ImpressionCard } from '../../../components/ImpressionCard'
+import { ShareButton } from '../../../components/ShareButton'
 import { TrackListView, songSignals, type NucleusOption, type TransferTarget } from '../../../components/TrackListView'
 import { PulseDot, primaryButtonClass } from '../../../components/ui'
 import type { Track } from '../../../types/track'
@@ -921,6 +922,7 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
         >
           <Sparkles className="h-3.5 w-3.5" /> talk to it
         </button>
+        <ShareButton nucleusId={nucleusId} trackCount={tracks.length} />
       </div>
 
       {/* Sidebar toggle button */}

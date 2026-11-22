@@ -17,6 +17,7 @@ import { Route as StartRouteImport } from './routes/start'
 import { Route as AiCallbackRouteImport } from './routes/ai/callback'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
+import { Route as STokenRouteImport } from './routes/s/$token'
 import { Route as ApiAccountIndexRouteImport } from './routes/api/account/index'
 import { Route as ApiAccountMergeRouteImport } from './routes/api/account/merge'
 import { Route as ApiAiConnectionRouteImport } from './routes/api/ai/connection'
@@ -31,6 +32,7 @@ import { Route as AppNNucleusIdRouteImport } from './routes/app/n/$nucleusId'
 import { Route as ApiAiOpenrouterExchangeRouteImport } from './routes/api/ai/openrouter/exchange'
 import { Route as ApiNucleiNucleusIdIndexRouteImport } from './routes/api/nuclei/$nucleusId/index'
 import { Route as ApiNucleiNucleusIdReadRouteImport } from './routes/api/nuclei/$nucleusId/read'
+import { Route as ApiNucleiNucleusIdShareRouteImport } from './routes/api/nuclei/$nucleusId/share'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -70,6 +72,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
   path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const STokenRoute = STokenRouteImport.update({
+  id: '/s/$token',
+  path: '/s/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAccountIndexRoute = ApiAccountIndexRouteImport.update({
@@ -142,6 +149,11 @@ const ApiNucleiNucleusIdReadRoute = ApiNucleiNucleusIdReadRouteImport.update({
   path: '/api/nuclei/$nucleusId/read',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiNucleiNucleusIdShareRoute = ApiNucleiNucleusIdShareRouteImport.update({
+  id: '/api/nuclei/$nucleusId/share',
+  path: '/api/nuclei/$nucleusId/share',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -151,6 +163,7 @@ export interface FileRoutesByFullPath {
   '/start': typeof StartRoute
   '/ai/callback': typeof AiCallbackRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/s/$token': typeof STokenRoute
   '/app/': typeof AppIndexRoute
   '/api/account/merge': typeof ApiAccountMergeRoute
   '/api/ai/connection': typeof ApiAiConnectionRoute
@@ -165,6 +178,7 @@ export interface FileRoutesByFullPath {
   '/api/tracks/': typeof ApiTracksIndexRoute
   '/api/ai/openrouter/exchange': typeof ApiAiOpenrouterExchangeRoute
   '/api/nuclei/$nucleusId/read': typeof ApiNucleiNucleusIdReadRoute
+  '/api/nuclei/$nucleusId/share': typeof ApiNucleiNucleusIdShareRoute
   '/api/nuclei/$nucleusId/': typeof ApiNucleiNucleusIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -175,6 +189,7 @@ export interface FileRoutesByTo {
   '/start': typeof StartRoute
   '/ai/callback': typeof AiCallbackRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/s/$token': typeof STokenRoute
   '/app': typeof AppIndexRoute
   '/api/account/merge': typeof ApiAccountMergeRoute
   '/api/ai/connection': typeof ApiAiConnectionRoute
@@ -189,6 +204,7 @@ export interface FileRoutesByTo {
   '/api/tracks': typeof ApiTracksIndexRoute
   '/api/ai/openrouter/exchange': typeof ApiAiOpenrouterExchangeRoute
   '/api/nuclei/$nucleusId/read': typeof ApiNucleiNucleusIdReadRoute
+  '/api/nuclei/$nucleusId/share': typeof ApiNucleiNucleusIdShareRoute
   '/api/nuclei/$nucleusId': typeof ApiNucleiNucleusIdIndexRoute
 }
 export interface FileRoutesById {
@@ -200,6 +216,7 @@ export interface FileRoutesById {
   '/start': typeof StartRoute
   '/ai/callback': typeof AiCallbackRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/s/$token': typeof STokenRoute
   '/app/': typeof AppIndexRoute
   '/api/account/merge': typeof ApiAccountMergeRoute
   '/api/ai/connection': typeof ApiAiConnectionRoute
@@ -214,6 +231,7 @@ export interface FileRoutesById {
   '/api/tracks/': typeof ApiTracksIndexRoute
   '/api/ai/openrouter/exchange': typeof ApiAiOpenrouterExchangeRoute
   '/api/nuclei/$nucleusId/read': typeof ApiNucleiNucleusIdReadRoute
+  '/api/nuclei/$nucleusId/share': typeof ApiNucleiNucleusIdShareRoute
   '/api/nuclei/$nucleusId/': typeof ApiNucleiNucleusIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -226,6 +244,7 @@ export interface FileRouteTypes {
     | '/start'
     | '/ai/callback'
     | '/auth/callback'
+    | '/s/$token'
     | '/app/'
     | '/api/account/merge'
     | '/api/ai/connection'
@@ -240,6 +259,7 @@ export interface FileRouteTypes {
     | '/api/tracks/'
     | '/api/ai/openrouter/exchange'
     | '/api/nuclei/$nucleusId/read'
+    | '/api/nuclei/$nucleusId/share'
     | '/api/nuclei/$nucleusId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -250,6 +270,7 @@ export interface FileRouteTypes {
     | '/start'
     | '/ai/callback'
     | '/auth/callback'
+    | '/s/$token'
     | '/app'
     | '/api/account/merge'
     | '/api/ai/connection'
@@ -264,6 +285,7 @@ export interface FileRouteTypes {
     | '/api/tracks'
     | '/api/ai/openrouter/exchange'
     | '/api/nuclei/$nucleusId/read'
+    | '/api/nuclei/$nucleusId/share'
     | '/api/nuclei/$nucleusId'
   id:
     | '__root__'
@@ -274,6 +296,7 @@ export interface FileRouteTypes {
     | '/start'
     | '/ai/callback'
     | '/auth/callback'
+    | '/s/$token'
     | '/app/'
     | '/api/account/merge'
     | '/api/ai/connection'
@@ -288,6 +311,7 @@ export interface FileRouteTypes {
     | '/api/tracks/'
     | '/api/ai/openrouter/exchange'
     | '/api/nuclei/$nucleusId/read'
+    | '/api/nuclei/$nucleusId/share'
     | '/api/nuclei/$nucleusId/'
   fileRoutesById: FileRoutesById
 }
@@ -299,6 +323,7 @@ export interface RootRouteChildren {
   StartRoute: typeof StartRoute
   AiCallbackRoute: typeof AiCallbackRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  STokenRoute: typeof STokenRoute
   AppIndexRoute: typeof AppIndexRoute
   ApiAccountMergeRoute: typeof ApiAccountMergeRoute
   ApiAiConnectionRoute: typeof ApiAiConnectionRoute
@@ -313,6 +338,7 @@ export interface RootRouteChildren {
   ApiTracksIndexRoute: typeof ApiTracksIndexRoute
   ApiAiOpenrouterExchangeRoute: typeof ApiAiOpenrouterExchangeRoute
   ApiNucleiNucleusIdReadRoute: typeof ApiNucleiNucleusIdReadRoute
+  ApiNucleiNucleusIdShareRoute: typeof ApiNucleiNucleusIdShareRoute
   ApiNucleiNucleusIdIndexRoute: typeof ApiNucleiNucleusIdIndexRoute
 }
 
@@ -372,6 +398,13 @@ declare module '@tanstack/react-router' {
       path: '/auth/callback'
       fullPath: '/auth/callback'
       preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/s/$token': {
+      id: '/s/$token'
+      path: '/s/$token'
+      fullPath: '/s/$token'
+      preLoaderRoute: typeof STokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/account/': {
@@ -472,6 +505,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiNucleiNucleusIdReadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/nuclei/$nucleusId/share': {
+      id: '/api/nuclei/$nucleusId/share'
+      path: '/api/nuclei/$nucleusId/share'
+      fullPath: '/api/nuclei/$nucleusId/share'
+      preLoaderRoute: typeof ApiNucleiNucleusIdShareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -483,6 +523,7 @@ const rootRouteChildren: RootRouteChildren = {
   StartRoute: StartRoute,
   AiCallbackRoute: AiCallbackRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  STokenRoute: STokenRoute,
   AppIndexRoute: AppIndexRoute,
   ApiAccountMergeRoute: ApiAccountMergeRoute,
   ApiAiConnectionRoute: ApiAiConnectionRoute,
@@ -497,6 +538,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiTracksIndexRoute: ApiTracksIndexRoute,
   ApiAiOpenrouterExchangeRoute: ApiAiOpenrouterExchangeRoute,
   ApiNucleiNucleusIdReadRoute: ApiNucleiNucleusIdReadRoute,
+  ApiNucleiNucleusIdShareRoute: ApiNucleiNucleusIdShareRoute,
   ApiNucleiNucleusIdIndexRoute: ApiNucleiNucleusIdIndexRoute,
 }
 export const routeTree = rootRouteImport

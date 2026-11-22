@@ -73,3 +73,11 @@ export const transferTracks = (fromNucleusId: number, toNucleusId: number, track
     '/api/tracks/transfer',
     send('POST', { fromNucleusId, toNucleusId, trackIds, mode }),
   )
+
+// Public read-only link (/s/<token>). token is null while the nucleus isn't shared.
+export const getShareLink = (nucleusId: number) => call<{ token: string | null }>(`/api/nuclei/${nucleusId}/share`)
+
+export const enableShareLink = (nucleusId: number) => call<{ token: string }>(`/api/nuclei/${nucleusId}/share`, send('POST'))
+
+export const disableShareLink = (nucleusId: number) =>
+  call<{ token: null }>(`/api/nuclei/${nucleusId}/share`, send('DELETE'))

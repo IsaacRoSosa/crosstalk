@@ -86,6 +86,10 @@ function Privacy() {
         <Section title="who else sees what">
           <p>Crosstalk runs on a few outside services. Each one gets only what it needs:</p>
           <ul className="space-y-3">
+            <Item name="people you share with">
+              Only if you share a nucleus. Anyone with its link sees its name, songs, what was read in each one and its first
+              impression; not your chat, your account or your other nuclei. Stop sharing and the link stops working.
+            </Item>
             <Item name="supabase">Our database and sign-in. Everything listed above lives there.</Item>
             <Item name="vercel">
               Hosts the app. Like any web host, it keeps short-lived request logs. It also counts page views for us (which

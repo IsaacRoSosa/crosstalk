@@ -79,6 +79,8 @@ export type Database = {
           impression_track_count: number | null
           impression_updated_at: string | null
           name_is_custom: boolean
+          share_token: string | null
+          shared_at: string | null
           created_at: string
           dominant_emotion: string | null
           id: number
@@ -91,6 +93,8 @@ export type Database = {
           impression_track_count?: number | null
           impression_updated_at?: string | null
           name_is_custom?: boolean
+          share_token?: string | null
+          shared_at?: string | null
           created_at?: string
           dominant_emotion?: string | null
           id?: never
@@ -103,6 +107,8 @@ export type Database = {
           impression_track_count?: number | null
           impression_updated_at?: string | null
           name_is_custom?: boolean
+          share_token?: string | null
+          shared_at?: string | null
           created_at?: string
           dominant_emotion?: string | null
           id?: never

@@ -55,7 +55,8 @@ export const Route = createRootRoute({
 // link) are folded into one route so the dashboard groups pages instead of listing every nucleus.
 function anonymizePageView(event: BeforeSendEvent): BeforeSendEvent {
   const url = new URL(event.url)
-  url.pathname = url.pathname.replace(/\/n\/[^/]+/, '/n/[id]')
+  // Share tokens are folded too: anyone holding one can open that nucleus
+  url.pathname = url.pathname.replace(/\/n\/[^/]+/, '/n/[id]').replace(/^\/s\/[^/]+/, '/s/[token]')
   url.search = ''
   return { ...event, url: url.toString() }
 }
