@@ -6,6 +6,7 @@ import type { NucleusVisualizationHandle } from '../components/NucleusVisualizat
 import { NucleusChat } from '../components/NucleusChat'
 import type { Track } from '../types/track'
 import { apiFetch } from '../lib/api-client'
+import { isEmptyImport, parseImportInput } from '../lib/import-input'
 import '../styles/galaxy.css'
 
 // YouTube IFrame API types
@@ -50,7 +51,7 @@ export const Route = createFileRoute('/')({ component: App })
 
 function App() {
   const [tracks, setTracks] = useState<Track[]>([])
-  const [spotifyUrl, setSpotifyUrl] = useState('')
+  const [importInput, setImportInput] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [playlistProgress, setPlaylistProgress] = useState<{
@@ -429,99 +430,79 @@ function App() {
   }
 
   const addTrack = async () => {
-    if (!spotifyUrl.trim()) return
+    const input = importInput.trim()
+    if (!input) return
 
-    const url = spotifyUrl.trim()
-    const isPlaylist = url.includes('/playlist/')
+    const parsed = parseImportInput(input)
+    if (isEmptyImport(parsed)) {
+      setError('Paste Spotify song links or a Deezer playlist link.')
+      return
+    }
+
+    // Single songs are added without the progress bar or a summary
+    const songCount = parsed.spotifyTrackIds.length + parsed.deezerTrackIds.length
+    const isBatch = songCount > 1 || parsed.deezerPlaylistIds.length > 0 || parsed.deezerShortLinks.length > 0
+    const previousCount = tracks.length
 
     setIsAnalyzing(true)
     setError(null)
     setPlaylistProgress(null)
 
-    try {
-      if (isPlaylist) {
-        // Handle playlist with incremental updates
-        const initialTrackCount = tracks.length
-
-        // Set up polling to refresh tracks while processing
-        setPlaylistProgress({ current: 0, total: 25, isProcessing: true })
-
-        const pollInterval = setInterval(async () => {
-          try {
-            const response = await apiFetch('/api/tracks')
-            const data = await response.json()
-            if (data.tracks) {
-              setTracks(data.tracks)
-              const newCount = data.tracks.length - initialTrackCount
-              if (newCount > 0) {
-                setPlaylistProgress(prev => prev ? { ...prev, current: newCount } : null)
-              }
+    // While a batch imports, refresh the list so tracks appear in orbit one by one
+    let pollInterval: ReturnType<typeof setInterval> | null = null
+    if (isBatch) {
+      const expected = parsed.deezerPlaylistIds.length > 0 || parsed.deezerShortLinks.length > 0 ? 25 : Math.min(songCount, 25)
+      setPlaylistProgress({ current: 0, total: expected, isProcessing: true })
+      pollInterval = setInterval(async () => {
+        try {
+          const response = await apiFetch('/api/tracks')
+          const data = await response.json()
+          if (response.ok && data.tracks) {
+            setTracks(data.tracks)
+            const added = data.tracks.length - previousCount
+            if (added > 0) {
+              setPlaylistProgress(prev => (prev ? { ...prev, current: Math.min(added, prev.total) } : null))
             }
-          } catch (err) {
-            console.error('Failed to poll tracks:', err)
           }
-        }, 2000) // Poll every 2 seconds
-
-        // Start playlist analysis
-        const response = await apiFetch('/api/tracks/analyze-playlist', {
-          method: 'POST',
-          body: JSON.stringify({ spotifyUrl: url }),
-        })
-
-        clearInterval(pollInterval)
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to analyze playlist')
+        } catch (err) {
+          console.error('Failed to poll tracks:', err)
         }
+      }, 2000)
+    }
 
-        // Final refresh to ensure we have all tracks
-        await loadTracks()
+    try {
+      const response = await apiFetch('/api/tracks/import', {
+        method: 'POST',
+        body: JSON.stringify({ input }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to add tracks')
+      }
 
-        // Show summary
+      await loadTracks()
+      setImportInput('')
+
+      if (isBatch || data.successCount === 0) {
         const summary: string[] = []
-        if (data.successCount > 0) {
-          summary.push(`✓ ${data.successCount} tracks added`)
-        }
-        if (data.skippedCount > 0) {
-          summary.push(`○ ${data.skippedCount} already in collection`)
-        }
+        if (data.successCount > 0) summary.push(`✓ ${data.successCount} added`)
+        if (data.skippedCount > 0) summary.push(`○ ${data.skippedCount} already in collection`)
         if (data.failedCount > 0) {
-          summary.push(`✗ ${data.failedCount} failed (no lyrics or errors)`)
+          summary.push(data.failedCount === 1 && !isBatch ? `✗ ${data.failed[0].reason}` : `✗ ${data.failedCount} failed (no lyrics or errors)`)
         }
-
+        if (data.notice) summary.push(data.notice)
         setError(summary.join(' • '))
-        setSpotifyUrl('')
+      }
 
-        // Rename nucleus if needed
-        const totalAdded = data.successCount
-        if (totalAdded >= 5) {
-          await renameNucleus()
-        }
-      } else {
-        // Handle single track (original behavior)
-        const response = await apiFetch('/api/tracks/analyze', {
-          method: 'POST',
-          body: JSON.stringify({ spotifyUrl: url }),
-        })
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to analyze track')
-        }
-
-        setTracks(prev => [data.track, ...prev])
-        setSpotifyUrl('')
-
-        if (tracks.length > 0 && (tracks.length + 1) % 5 === 0) {
-          await renameNucleus()
-        }
+      // Rename the nucleus every time the collection passes a multiple of 5 tracks
+      const newCount = previousCount + data.successCount
+      if (data.successCount > 0 && Math.floor(newCount / 5) > Math.floor(previousCount / 5)) {
+        await renameNucleus()
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unknown error')
     } finally {
+      if (pollInterval) clearInterval(pollInterval)
       setIsAnalyzing(false)
       setPlaylistProgress(null)
     }
@@ -664,26 +645,29 @@ function App() {
             <div className="flex gap-2">
               <input
                 type="text"
-                value={spotifyUrl}
-                onChange={e => setSpotifyUrl(e.target.value)}
+                value={importInput}
+                onChange={e => setImportInput(e.target.value)}
                 onKeyPress={e => e.key === 'Enter' && addTrack()}
-                placeholder="Paste Spotify track or playlist URL..."
+                placeholder="Paste Spotify songs or a Deezer playlist..."
                 className="flex-1 bg-black border border-white/30 px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-white font-mono"
                 disabled={isAnalyzing}
               />
               <button
                 onClick={addTrack}
-                disabled={!spotifyUrl.trim() || isAnalyzing}
+                disabled={!importInput.trim() || isAnalyzing}
                 className="px-3 py-2 bg-white text-black hover:bg-gray-200 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors flex items-center gap-1 font-semibold font-mono text-sm"
               >
                 <Plus className="w-4 h-4" />
                 {isAnalyzing ? '...' : 'Add'}
               </button>
             </div>
+            <p className="mt-1 text-[11px] leading-snug text-white/40 font-mono">
+              Tip: in the Spotify desktop app, select songs and copy them (Cmd/Ctrl+C) to paste many at once.
+            </p>
             {playlistProgress && playlistProgress.isProcessing && (
               <div className="mt-2 border border-white/30 bg-black/50 p-2">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-white text-xs font-mono">Processing playlist...</span>
+                  <span className="text-white text-xs font-mono">Adding songs...</span>
                   <span className="text-white text-xs font-mono">{playlistProgress.current}/{playlistProgress.total}</span>
                 </div>
                 <div className="w-full h-1 bg-white/20 overflow-hidden">

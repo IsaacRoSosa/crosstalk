@@ -13,8 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiTracksIndexRouteImport } from './routes/api/tracks/index'
 import { Route as ApiChatIndexRouteImport } from './routes/api/chat/index'
 import { Route as ApiTracksVideoRouteImport } from './routes/api/tracks/video'
-import { Route as ApiTracksAnalyzePlaylistRouteImport } from './routes/api/tracks/analyze-playlist'
-import { Route as ApiTracksAnalyzeRouteImport } from './routes/api/tracks/analyze'
+import { Route as ApiTracksImportRouteImport } from './routes/api/tracks/import'
 import { Route as ApiNucleusRenameRouteImport } from './routes/api/nucleus/rename'
 import { Route as ApiChatMessageRouteImport } from './routes/api/chat/message'
 
@@ -38,15 +37,9 @@ const ApiTracksVideoRoute = ApiTracksVideoRouteImport.update({
   path: '/api/tracks/video',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTracksAnalyzePlaylistRoute =
-  ApiTracksAnalyzePlaylistRouteImport.update({
-    id: '/api/tracks/analyze-playlist',
-    path: '/api/tracks/analyze-playlist',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiTracksAnalyzeRoute = ApiTracksAnalyzeRouteImport.update({
-  id: '/api/tracks/analyze',
-  path: '/api/tracks/analyze',
+const ApiTracksImportRoute = ApiTracksImportRouteImport.update({
+  id: '/api/tracks/import',
+  path: '/api/tracks/import',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiNucleusRenameRoute = ApiNucleusRenameRouteImport.update({
@@ -64,8 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/chat/message': typeof ApiChatMessageRoute
   '/api/nucleus/rename': typeof ApiNucleusRenameRoute
-  '/api/tracks/analyze': typeof ApiTracksAnalyzeRoute
-  '/api/tracks/analyze-playlist': typeof ApiTracksAnalyzePlaylistRoute
+  '/api/tracks/import': typeof ApiTracksImportRoute
   '/api/tracks/video': typeof ApiTracksVideoRoute
   '/api/chat/': typeof ApiChatIndexRoute
   '/api/tracks/': typeof ApiTracksIndexRoute
@@ -74,8 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/chat/message': typeof ApiChatMessageRoute
   '/api/nucleus/rename': typeof ApiNucleusRenameRoute
-  '/api/tracks/analyze': typeof ApiTracksAnalyzeRoute
-  '/api/tracks/analyze-playlist': typeof ApiTracksAnalyzePlaylistRoute
+  '/api/tracks/import': typeof ApiTracksImportRoute
   '/api/tracks/video': typeof ApiTracksVideoRoute
   '/api/chat': typeof ApiChatIndexRoute
   '/api/tracks': typeof ApiTracksIndexRoute
@@ -85,8 +76,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/api/chat/message': typeof ApiChatMessageRoute
   '/api/nucleus/rename': typeof ApiNucleusRenameRoute
-  '/api/tracks/analyze': typeof ApiTracksAnalyzeRoute
-  '/api/tracks/analyze-playlist': typeof ApiTracksAnalyzePlaylistRoute
+  '/api/tracks/import': typeof ApiTracksImportRoute
   '/api/tracks/video': typeof ApiTracksVideoRoute
   '/api/chat/': typeof ApiChatIndexRoute
   '/api/tracks/': typeof ApiTracksIndexRoute
@@ -97,8 +87,7 @@ export interface FileRouteTypes {
     | '/'
     | '/api/chat/message'
     | '/api/nucleus/rename'
-    | '/api/tracks/analyze'
-    | '/api/tracks/analyze-playlist'
+    | '/api/tracks/import'
     | '/api/tracks/video'
     | '/api/chat/'
     | '/api/tracks/'
@@ -107,8 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/api/chat/message'
     | '/api/nucleus/rename'
-    | '/api/tracks/analyze'
-    | '/api/tracks/analyze-playlist'
+    | '/api/tracks/import'
     | '/api/tracks/video'
     | '/api/chat'
     | '/api/tracks'
@@ -117,8 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/api/chat/message'
     | '/api/nucleus/rename'
-    | '/api/tracks/analyze'
-    | '/api/tracks/analyze-playlist'
+    | '/api/tracks/import'
     | '/api/tracks/video'
     | '/api/chat/'
     | '/api/tracks/'
@@ -128,8 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiChatMessageRoute: typeof ApiChatMessageRoute
   ApiNucleusRenameRoute: typeof ApiNucleusRenameRoute
-  ApiTracksAnalyzeRoute: typeof ApiTracksAnalyzeRoute
-  ApiTracksAnalyzePlaylistRoute: typeof ApiTracksAnalyzePlaylistRoute
+  ApiTracksImportRoute: typeof ApiTracksImportRoute
   ApiTracksVideoRoute: typeof ApiTracksVideoRoute
   ApiChatIndexRoute: typeof ApiChatIndexRoute
   ApiTracksIndexRoute: typeof ApiTracksIndexRoute
@@ -165,18 +151,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTracksVideoRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/tracks/analyze-playlist': {
-      id: '/api/tracks/analyze-playlist'
-      path: '/api/tracks/analyze-playlist'
-      fullPath: '/api/tracks/analyze-playlist'
-      preLoaderRoute: typeof ApiTracksAnalyzePlaylistRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/tracks/analyze': {
-      id: '/api/tracks/analyze'
-      path: '/api/tracks/analyze'
-      fullPath: '/api/tracks/analyze'
-      preLoaderRoute: typeof ApiTracksAnalyzeRouteImport
+    '/api/tracks/import': {
+      id: '/api/tracks/import'
+      path: '/api/tracks/import'
+      fullPath: '/api/tracks/import'
+      preLoaderRoute: typeof ApiTracksImportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/nucleus/rename': {
@@ -200,8 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiChatMessageRoute: ApiChatMessageRoute,
   ApiNucleusRenameRoute: ApiNucleusRenameRoute,
-  ApiTracksAnalyzeRoute: ApiTracksAnalyzeRoute,
-  ApiTracksAnalyzePlaylistRoute: ApiTracksAnalyzePlaylistRoute,
+  ApiTracksImportRoute: ApiTracksImportRoute,
   ApiTracksVideoRoute: ApiTracksVideoRoute,
   ApiChatIndexRoute: ApiChatIndexRoute,
   ApiTracksIndexRoute: ApiTracksIndexRoute,

@@ -97,6 +97,26 @@ export async function findTrackBySpotifyId(db: Db, spotifyId: string): Promise<T
   return data
 }
 
+export async function findTrackByDeezerId(db: Db, deezerId: number): Promise<TrackRow | null> {
+  const { data, error } = await db.from('tracks').select('*').eq('deezer_id', deezerId).maybeSingle()
+  if (error) throw error
+  return data
+}
+
+// The same recording on Spotify and Deezer shares its ISRC, so this matches a song across sources
+export async function findAnalyzedTrackByIsrc(db: Db, isrc: string): Promise<TrackRow | null> {
+  const { data, error } = await db
+    .from('tracks')
+    .select('*')
+    .eq('isrc', isrc)
+    .not('analyzed_at', 'is', null)
+    .order('id', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
 // Saves a track in the shared catalog. If another request inserted the same song first, returns that row.
 export async function saveCatalogTrack(admin: Db, values: TrackInsert, existingId?: number): Promise<TrackRow> {
   if (existingId !== undefined) {
@@ -107,11 +127,24 @@ export async function saveCatalogTrack(admin: Db, values: TrackInsert, existingI
 
   const { data, error } = await admin.from('tracks').insert(values).select('*').single()
   if (!error) return data
-  if (error.code === UNIQUE_VIOLATION && values.spotify_id) {
-    const existing = await findTrackBySpotifyId(admin, values.spotify_id)
+  if (error.code === UNIQUE_VIOLATION) {
+    const existing =
+      (values.spotify_id ? await findTrackBySpotifyId(admin, values.spotify_id) : null) ??
+      (values.deezer_id ? await findTrackByDeezerId(admin, values.deezer_id) : null)
     if (existing) return existing
   }
   throw error
+}
+
+// Records another source id (e.g. the Deezer id of a song first added from Spotify).
+// Best effort: if that id already belongs to another catalog row, it is left as is.
+export async function linkTrackSource(
+  admin: Db,
+  trackId: number,
+  ids: { spotify_id?: string; deezer_id?: number },
+): Promise<void> {
+  const { error } = await admin.from('tracks').update(ids).eq('id', trackId)
+  if (error && error.code !== UNIQUE_VIOLATION) throw error
 }
 
 export async function setTrackVideo(admin: Db, trackId: number, youtubeVideoId: string): Promise<void> {
