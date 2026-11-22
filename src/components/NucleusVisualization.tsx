@@ -62,6 +62,32 @@ const ORBIT_TILTS = [
 // Track orbit speeds (how fast tracks move along their orbit)
 const TRACK_SPEEDS = [0.25, 0.22, 0.19, 0.17]
 
+// A track sphere in the scene. Its angle on the orbit is `phase + elapsed * speed`; when the layout
+// changes (tracks added or removed), `phase` eases toward `targetPhase` and, after moving to another
+// orbit, the sphere glides to it (`settling`) instead of jumping.
+interface TrackPoint {
+  group: THREE.Group
+  billboard: THREE.Mesh
+  glassMaterial: THREE.ShaderMaterial
+  track: Track
+  orbitIndex: number
+  phase: number
+  targetPhase: number
+  settling: boolean
+}
+
+// Stable pseudo-random number in [0, 1) for a track, so its jitter on the orbit never changes
+function stableUnit(id: number): number {
+  const x = Math.sin(id * 12.9898 + 78.233) * 43758.5453
+  return x - Math.floor(x)
+}
+
+// Smallest signed difference between two angles, in (-PI, PI]
+function angleDelta(from: number, to: number): number {
+  const d = (to - from) % (Math.PI * 2)
+  return d > Math.PI ? d - Math.PI * 2 : d <= -Math.PI ? d + Math.PI * 2 : d
+}
+
 // Factory function to create fresh shader uniforms
 const createDitheringShader = () => ({
   uniforms: {
@@ -147,7 +173,9 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
   const controlsRef = useRef<OrbitControls | null>(null)
   const composerRef = useRef<EffectComposer | null>(null)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
-  const trackPointsRef = useRef<Map<number, { group: THREE.Group; track: Track; orbitIndex: number; initialAngle: number; billboard: THREE.Mesh; glassMaterial: THREE.ShaderMaterial }>>(new Map())
+  const trackPointsRef = useRef<Map<number, TrackPoint>>(new Map())
+  // Seconds since the scene started, shared with the effect that adds and moves tracks
+  const elapsedRef = useRef(0)
   const orbitGroupsRef = useRef<THREE.Group[]>([])
   const nucleusRef = useRef<THREE.Group | null>(null)
   const animationIdRef = useRef<number | null>(null)
@@ -1209,9 +1237,15 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
 
     // Animation loop
     const clock = new THREE.Clock()
+    let previousElapsed = 0
+    const orbitTarget = new THREE.Vector3()
 
     const animate = () => {
       const elapsedTime = clock.getElapsedTime()
+      // Capped so a backgrounded tab doesn't make everything jump when it comes back
+      const deltaTime = Math.min(elapsedTime - previousElapsed, 0.1)
+      previousElapsed = elapsedTime
+      elapsedRef.current = elapsedTime
 
       // Animate nucleus: 3D diffraction spike core + spikes
       if (nucleusRef.current) {
@@ -1285,17 +1319,33 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
       let followedWorldPos: THREE.Vector3 | null = null
       
       trackPointsRef.current.forEach((trackData, trackId) => {
-        const { group, billboard, orbitIndex, initialAngle } = trackData
+        const { group, billboard, orbitIndex } = trackData
         const radius = ORBIT_RADII[orbitIndex]
         const speed = TRACK_SPEEDS[orbitIndex] || 0.3
 
-        // Calculate current angle - track moves along orbit
-        const currentAngle = initialAngle + elapsedTime * speed
+        // Ease toward the track's place in the current layout (along the shortest arc)
+        const phaseDelta = angleDelta(trackData.phase, trackData.targetPhase)
+        trackData.phase += Math.abs(phaseDelta) < 0.0005 ? phaseDelta : phaseDelta * Math.min(1, deltaTime * 2.5)
 
-        // Update position along the circular orbit (in local space of tilted group)
-        group.position.x = Math.cos(currentAngle) * radius
-        group.position.y = Math.sin(elapsedTime * 0.8 + trackId * 0.5) * 0.02 // Subtle vertical bob
-        group.position.z = Math.sin(currentAngle) * radius
+        // Calculate current angle - track moves along orbit
+        const currentAngle = trackData.phase + elapsedTime * speed
+
+        // Position on the circular orbit (in local space of the tilted orbit group)
+        orbitTarget.set(
+          Math.cos(currentAngle) * radius,
+          Math.sin(elapsedTime * 0.8 + trackId * 0.5) * 0.02, // Subtle vertical bob
+          Math.sin(currentAngle) * radius,
+        )
+        if (trackData.settling) {
+          // Just moved to another orbit: glide there, then follow the orbit exactly
+          group.position.lerp(orbitTarget, Math.min(1, deltaTime * 4))
+          if (group.position.distanceToSquared(orbitTarget) < 0.0001) trackData.settling = false
+        } else {
+          group.position.copy(orbitTarget)
+        }
+
+        // New tracks grow in instead of popping into existence
+        if (group.scale.x < 1) group.scale.setScalar(Math.min(1, group.scale.x + deltaTime * 1.5))
 
         // Make billboard always face the camera
         const worldPos = new THREE.Vector3()
@@ -1407,53 +1457,74 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
     }
   }, [createNucleus, createOrbitGroup, createGlassMaterial]) // Only depends on stable callbacks
 
-  // Update track points when tracks change - without recreating the scene
+  // Keep the spheres in sync with the tracks without rebuilding them: existing tracks keep their
+  // sphere and glide to their new place, new ones grow in, removed ones go away. (Rebuilding every
+  // sphere, with random offsets, on each update made them jump around while songs were being added.)
   useEffect(() => {
     const orbitGroups = orbitGroupsRef.current
     if (orbitGroups.length === 0) return
 
-    // Clear existing track points from orbit groups
-    trackPointsRef.current.forEach(({ group: trackGroup, orbitIndex }) => {
-      trackGroup.children.forEach(child => {
+    const points = trackPointsRef.current
+    const elapsed = elapsedRef.current
+
+    // Where each track should be: evenly spread around its orbit, with a small stable jitter
+    const layout = new Map<number, { track: Track; orbitIndex: number; targetPhase: number }>()
+    tracksByOrbit.forEach((orbitTracks, orbitIndex) => {
+      orbitTracks.forEach((track, trackIndex) => {
+        const baseAngle = (trackIndex / Math.max(orbitTracks.length, 1)) * Math.PI * 2
+        const jitter = (stableUnit(track.id) - 0.5) * 0.5
+        layout.set(track.id, { track, orbitIndex, targetPhase: baseAngle + jitter })
+      })
+    })
+
+    // Remove spheres for tracks that are gone
+    points.forEach((point, trackId) => {
+      if (layout.has(trackId)) return
+      point.group.children.forEach(child => {
         if (child instanceof THREE.Mesh) {
           child.geometry.dispose()
-          if (child.material instanceof THREE.Material) {
-            child.material.dispose()
-          }
+          if (child.material instanceof THREE.Material) child.material.dispose()
         }
       })
-      const orbitGroup = orbitGroups[orbitIndex]
-      if (orbitGroup) {
-        orbitGroup.remove(trackGroup)
-      }
+      orbitGroups[point.orbitIndex]?.remove(point.group)
+      points.delete(trackId)
     })
-    trackPointsRef.current.clear()
 
-    // Create new track spheres with staggered initial angles
-    tracksByOrbit.forEach((orbitTracks, orbitIndex) => {
-      const radius = ORBIT_RADII[orbitIndex]
+    layout.forEach(({ track, orbitIndex, targetPhase }, trackId) => {
       const orbitGroup = orbitGroups[orbitIndex]
       if (!orbitGroup) return
+      const existing = points.get(trackId)
 
-      orbitTracks.forEach((track, trackIndex) => {
-        // Distribute tracks evenly around the orbit with some randomness
-        const baseAngle = (trackIndex / Math.max(orbitTracks.length, 1)) * Math.PI * 2
-        const randomOffset = (Math.random() - 0.5) * 0.5 // Add some randomness
-        const initialAngle = baseAngle + randomOffset
-
-        const { group, billboard, glassMaterial } = createTrackSphere(radius, initialAngle, track.cover_url)
-        orbitGroup.add(group) // Add to orbit group so it inherits the tilt
-        
-        // Apply pre-extracted colors if available
-        const existingColors = trackColorsRef.current.get(track.id)
-        if (existingColors) {
-          glassMaterial.uniforms.dominantColor.value.set(existingColors.dominant)
-          glassMaterial.uniforms.darkerColor.value.set(existingColors.darker)
-          glassMaterial.uniforms.lighterColor.value.set(existingColors.lighter)
+      if (existing) {
+        existing.track = track
+        existing.targetPhase = targetPhase
+        if (existing.orbitIndex !== orbitIndex) {
+          // Keep the angle continuous (orbits turn at different speeds), move into the new orbit's
+          // tilted group without changing where it is on screen, then let the animation glide it
+          const currentAngle = existing.phase + elapsed * (TRACK_SPEEDS[existing.orbitIndex] || 0.3)
+          existing.phase = currentAngle - elapsed * (TRACK_SPEEDS[orbitIndex] || 0.3)
+          orbitGroup.attach(existing.group)
+          existing.orbitIndex = orbitIndex
+          existing.settling = true
         }
-        
-        trackPointsRef.current.set(track.id, { group, billboard, glassMaterial, track, orbitIndex, initialAngle })
-      })
+        return
+      }
+
+      const radius = ORBIT_RADII[orbitIndex]
+      const speed = TRACK_SPEEDS[orbitIndex] || 0.3
+      const { group, billboard, glassMaterial } = createTrackSphere(radius, targetPhase + elapsed * speed, track.cover_url)
+      group.scale.setScalar(0.01)
+      orbitGroup.add(group) // Add to orbit group so it inherits the tilt
+
+      // Apply pre-extracted colors if available
+      const existingColors = trackColorsRef.current.get(track.id)
+      if (existingColors) {
+        glassMaterial.uniforms.dominantColor.value.set(existingColors.dominant)
+        glassMaterial.uniforms.darkerColor.value.set(existingColors.darker)
+        glassMaterial.uniforms.lighterColor.value.set(existingColors.lighter)
+      }
+
+      points.set(track.id, { group, billboard, glassMaterial, track, orbitIndex, phase: targetPhase, targetPhase, settling: false })
     })
   }, [tracksByOrbit, createTrackSphere])
 
