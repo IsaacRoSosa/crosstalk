@@ -5,7 +5,7 @@ import { Eyebrow, GhostButton, Panel, PanelHeader, PrimaryButton, PulseDot, ghos
 import { apiFetch } from '../lib/api-client'
 import { isEmptyImport, parseImportInput, type ParsedImportInput } from '../lib/import-input'
 import { importSongs, type ImportProgress, type ImportResult } from '../lib/import-client'
-import { ApiError, autoNameNucleus, createNucleus, listTracks } from '../lib/nuclei-client'
+import { ApiError, createNucleus, listTracks, readNucleus } from '../lib/nuclei-client'
 import { MAX_SONGS_PER_IMPORT } from '../types/nucleus'
 import { listenForAiConnected, startOpenRouterConnect } from '../lib/openrouter-connect'
 import { getTemp, removeTemp, setTemp } from '../lib/temp-storage'
@@ -345,7 +345,7 @@ function Never({ children }: { children: ReactNode }) {
 
 type ImportSummary = Pick<ImportResult, 'successCount' | 'skippedCount' | 'failedCount' | 'notice' | 'aiError'>
 
-type Phase = 'importing' | 'naming' | 'done' | 'failed'
+type Phase = 'importing' | 'reading' | 'done' | 'failed'
 
 // The song being read right now, and how far along it is
 interface CurrentSong {
@@ -372,6 +372,7 @@ function FormingStep({ onBack }: { onBack: () => void }) {
   const [phase, setPhase] = useState<Phase>('importing')
   const [summary, setSummary] = useState<ImportSummary | null>(null)
   const [nucleusName, setNucleusName] = useState<string | null>(null)
+  const [impression, setImpression] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [expected, setExpected] = useState(MAX_SONGS_PER_IMPORT)
   const [added, setAdded] = useState(0)
@@ -464,12 +465,13 @@ function FormingStep({ onBack }: { onBack: () => void }) {
       if (finalData) setTracks(finalData.tracks)
 
       if (data.successCount > 0 && !data.aiError) {
-        setPhase('naming')
+        setPhase('reading')
         try {
-          const named = await autoNameNucleus(target.id)
-          if (named.name) setNucleusName(named.name)
+          const read = await readNucleus(target.id)
+          setNucleusName(read.name)
+          setImpression(read.impression)
         } catch {
-          // a nucleus without a new name is fine
+          // the songs are in; the first impression can be read later from the nucleus
         }
       }
       // Keep the songs (and the nucleus) if the AI wasn't available, so connecting it and coming back retries them
@@ -503,7 +505,7 @@ function FormingStep({ onBack }: { onBack: () => void }) {
 
   const title = done
     ? nucleusName
-      ? `your nucleus: ${nucleusName.toLowerCase()}`
+      ? nucleusName.toLowerCase()
       : summary && summary.successCount === 0
         ? 'nothing new was added'
         : 'your nucleus is ready'
@@ -526,13 +528,13 @@ function FormingStep({ onBack }: { onBack: () => void }) {
         style={{ background: 'linear-gradient(0deg, rgba(0,0,0,.95) 30%, rgba(0,0,0,0))' }}
       />
 
-      <div className="absolute left-6 top-6 w-[min(340px,calc(100%-3rem))] md:left-10 md:top-10">
+      <div className="absolute left-6 top-6 w-[min(380px,calc(100%-3rem))] md:left-10 md:top-10">
         <Eyebrow className="mb-3 text-white/40">forming</Eyebrow>
         <h1 className="mb-5 text-2xl font-semibold leading-snug tracking-tight">{title}</h1>
         {/* The song being read right now */}
-        {(current || phase === 'naming') && (
+        {(current || phase === 'reading') && (
           <div className="mb-4 flex items-center gap-3 border border-white/20 bg-black/70 p-2.5">
-            {phase === 'naming' ? (
+            {phase === 'reading' ? (
               <span className="flex h-11 w-11 shrink-0 items-center justify-center border border-white/15">
                 <span className="ct-pulse-dot h-1.5 w-1.5" />
               </span>
@@ -542,8 +544,11 @@ function FormingStep({ onBack }: { onBack: () => void }) {
               <span className="h-11 w-11 shrink-0 border border-white/15" />
             )}
             <div className="min-w-0 flex-1">
-              {phase === 'naming' ? (
-                <div className="text-xs text-white">naming the nucleus</div>
+              {phase === 'reading' ? (
+                <>
+                  <div className="text-xs text-white">reading you</div>
+                  <div className="mt-1 text-[10px] text-white/40">putting the songs together into a first impression</div>
+                </>
               ) : (
                 current && (
                   <>
@@ -561,7 +566,7 @@ function FormingStep({ onBack }: { onBack: () => void }) {
         )}
 
         {/* What just happened to the last few songs */}
-        {recent.length > 0 && (
+        {!done && recent.length > 0 && (
           <ul className="space-y-1.5">
             {recent.map((r, i) => (
               <li
@@ -590,8 +595,16 @@ function FormingStep({ onBack }: { onBack: () => void }) {
           </p>
         )}
 
+        {/* The first impression: the point of all this */}
+        {done && impression && (
+          <div className="ct-fade-up mb-5">
+            <Eyebrow className="mb-2 text-white/40">first impression</Eyebrow>
+            <p className="text-[13px] leading-relaxed text-white/90">{impression}</p>
+          </div>
+        )}
+
         {done && summary && (
-          <p className="ct-fade-up mt-5 text-[11px] leading-relaxed text-white/60">
+          <p className="ct-fade-up mt-5 text-[11px] leading-relaxed text-white/50">
             {[
               summary.successCount > 0 && `${summary.successCount} added`,
               summary.skippedCount > 0 && `${summary.skippedCount} already in your nucleus`,
@@ -638,7 +651,7 @@ function FormingStep({ onBack }: { onBack: () => void }) {
             </Link>
           )}
           {!done && phase !== 'failed' && (
-            <GhostButton disabled>{phase === 'naming' ? 'naming...' : 'forming...'}</GhostButton>
+            <GhostButton disabled>{phase === 'reading' ? 'reading...' : 'forming...'}</GhostButton>
           )}
         </div>
       </div>

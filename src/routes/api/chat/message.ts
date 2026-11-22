@@ -3,65 +3,24 @@ import { chatReply } from '../../../lib/ai/analysis'
 import { errorResponse, HttpError, json } from '../../../lib/http'
 import { requireNucleus, requireUser } from '../../../lib/session'
 import { addMessages, listMessages, listNucleusTracks } from '../../../lib/repository'
-import { EMOTIONS, type Track } from '../../../types/track'
+import type { Track } from '../../../types/track'
+import { describeNucleusFacts, describeSongs } from '../../../lib/nucleus-facts'
 
 const MAX_MESSAGE_LENGTH = 2000
 const HISTORY_LENGTH = 10
 
-function describeCollection(nucleusName: string, tracks: Track[]): string {
+function describeCollection(nucleusName: string, tracks: Track[], impression: string | null): string {
   if (tracks.length === 0) {
     return `You are someone who can read people through their music. The playlist "${nucleusName}" is still empty: the person hasn't added any tracks yet.`
   }
 
-  const emotionCounts: Record<string, number> = {}
-  let totalValence = 0
-  let totalEnergy = 0
-  let validValenceCount = 0
-  let validEnergyCount = 0
-
-  for (const track of tracks) {
-    emotionCounts[track.emotion] = (emotionCounts[track.emotion] || 0) + 1
-    if (track.valence !== null) {
-      totalValence += track.valence
-      validValenceCount++
-    }
-    if (track.energy !== null) {
-      totalEnergy += track.energy
-      validEnergyCount++
-    }
-  }
-
-  const avgValence = validValenceCount > 0 ? totalValence / validValenceCount : 0
-  const avgEnergy = validEnergyCount > 0 ? totalEnergy / validEnergyCount : 0
-
-  const [dominantEmotion, dominantCount] = Object.entries(emotionCounts).sort(([, a], [, b]) => b - a)[0]
-  const dominantPercentage = ((dominantCount / tracks.length) * 100).toFixed(0)
-  const absentEmotions = EMOTIONS.filter((e) => !emotionCounts[e])
-
-  const trackSummary = tracks
-    .slice(0, 20)
-    .map(
-      (t) =>
-        `"${t.title}" by ${t.artist} - ${t.emotion}, valence:${t.valence?.toFixed(2)}, energy:${t.energy?.toFixed(2)}, ${t.mood_description}`,
-    )
-    .join('\n')
-
   return `You are someone who can read people through their music. You know the playlist "${nucleusName}" and what it says about the person who made it.
 
-Total tracks: ${tracks.length}
-
-What you notice:
-- Average valence: ${avgValence.toFixed(2)}, energy: ${avgEnergy.toFixed(2)}
-- Dominant emotion: ${dominantEmotion} (${dominantPercentage}%)
-- Missing: ${absentEmotions.length > 0 ? absentEmotions.join(', ') : 'none'}
-
-Emotion breakdown:
-${Object.entries(emotionCounts)
-  .map(([emotion, count]) => `- ${emotion}: ${count}`)
-  .join('\n')}
-
-Sample tracks:
-${trackSummary}`
+What their songs show:
+${describeNucleusFacts(tracks)}
+${impression ? `\nYour first impression of them, which they've seen:\n${impression}\n` : ''}
+Their songs:
+${describeSongs(tracks, 30)}`
 }
 
 const HOW_TO_TALK = `How to talk:
@@ -105,7 +64,7 @@ export const Route = createFileRoute('/api/chat/message')({
             listMessages(ctx.db, ctx.nucleus.id, HISTORY_LENGTH),
           ])
 
-          const systemPrompt = `${describeCollection(ctx.nucleus.name, tracks)}\n\n${HOW_TO_TALK}`
+          const systemPrompt = `${describeCollection(ctx.nucleus.name, tracks, ctx.nucleus.impression)}\n\n${HOW_TO_TALK}`
 
           const response = await chatReply(ctx.userId, apiKey, systemPrompt, history, message)
 

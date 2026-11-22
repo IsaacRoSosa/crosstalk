@@ -10,8 +10,10 @@ export const Route = createFileRoute('/api/nuclei/$nucleusId/')({
       GET: async ({ request, params }) => {
         try {
           const { nucleus } = await requireNucleus(await requireUser(request), params.nucleusId)
-          const { id, name, dominant_emotion, created_at, updated_at } = nucleus
-          return json({ nucleus: { id, name, dominant_emotion, created_at, updated_at } })
+          const { id, name, dominant_emotion, created_at, updated_at, impression, impression_track_count, impression_updated_at } = nucleus
+          return json({
+            nucleus: { id, name, dominant_emotion, created_at, updated_at, impression, impression_track_count, impression_updated_at },
+          })
         } catch (error) {
           return errorResponse(error, 'Error loading nucleus')
         }
@@ -26,7 +28,8 @@ export const Route = createFileRoute('/api/nuclei/$nucleusId/')({
           if (!name || name.length > 80) {
             throw new HttpError(400, 'Names can be 1 to 80 characters long.')
           }
-          const updated = await updateNucleus(ctx.db, ctx.nucleus.id, { name })
+          // From now on the AI's reads keep this name
+          const updated = await updateNucleus(ctx.db, ctx.nucleus.id, { name, name_is_custom: true })
           return json({ nucleus: { id: updated.id, name: updated.name } })
         } catch (error) {
           return errorResponse(error, 'Error renaming nucleus')

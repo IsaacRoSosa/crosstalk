@@ -4,10 +4,10 @@
 import { HttpError } from './http'
 import { requireEnv } from './env'
 import { fetchSpotifyMetadata } from './spotify'
-import { fetchDeezerTrack, type DeezerTrack } from './deezer'
+import { fetchDeezerTrack, findDeezerGenre, type DeezerTrack } from './deezer'
 import { findGeniusSongUrl } from './genius'
 import { findLyrics } from './lrclib'
-import { analyzeLyrics } from './ai/analysis'
+import { ANALYSIS_VERSION, analyzeLyrics } from './ai/analysis'
 import {
   addTrackToNucleus,
   findAnalyzedTrackByIsrc,
@@ -70,8 +70,45 @@ function fromDeezer(track: DeezerTrack): TrackCandidate {
   }
 }
 
-function reportCached(row: TrackRow, onProgress?: OnProgress) {
-  onProgress?.({ stage: 'song', song: { title: row.title, artist: row.artist, cover_url: row.cover_url }, cached: true })
+function reportSong(row: TrackRow, cached: boolean, onProgress?: OnProgress) {
+  onProgress?.({ stage: 'song', song: { title: row.title, artist: row.artist, cover_url: row.cover_url }, cached })
+}
+
+function candidateFromRow(row: TrackRow): TrackCandidate {
+  return {
+    ...(row.spotify_id ? { spotify_id: row.spotify_id } : {}),
+    ...(row.deezer_id ? { deezer_id: row.deezer_id } : {}),
+    isrc: row.isrc,
+    title: row.title,
+    artist: row.artist,
+    album: row.album,
+    cover_url: row.cover_url,
+    duration_ms: row.duration_ms,
+  }
+}
+
+// Adds a song that's already in the catalog. Songs read with an older prompt are read again, so the
+// catalog catches up over time; if that fails (no AI connected, rate limit, no lyrics), the old
+// reading is still better than nothing.
+async function addFromCatalog(ctx: NucleusContext, row: TrackRow, onProgress?: OnProgress): Promise<AddTrackResult> {
+  if (row.analysis_version >= ANALYSIS_VERSION) {
+    reportSong(row, true, onProgress)
+    return linkToNucleus(ctx, row)
+  }
+  // Already in this nucleus: nothing to add, so don't spend an AI request on it
+  if (await getNucleusTrackAddedAt(ctx.db, ctx.nucleus.id, row.id)) {
+    reportSong(row, true, onProgress)
+    return linkToNucleus(ctx, row)
+  }
+  reportSong(row, false, onProgress)
+  try {
+    const refreshed = await analyzeCandidate(ctx, candidateFromRow(row), row.id, onProgress)
+    return linkToNucleus(ctx, refreshed)
+  } catch (error) {
+    if (!(error instanceof HttpError)) throw error
+    log.info('pipeline', 'kept older analysis', { trackId: row.id, reason: error.message })
+    return linkToNucleus(ctx, row)
+  }
 }
 
 async function linkToNucleus(ctx: NucleusContext, row: TrackRow): Promise<AddTrackResult> {
@@ -96,7 +133,7 @@ async function analyzeCandidate(
   log.info('pipeline', 'analyzing new track', { track: label, spotifyId: candidate.spotify_id, deezerId: candidate.deezer_id })
 
   onProgress?.({ stage: 'lyrics' })
-  const [lyricsResult, geniusUrl] = await Promise.all([
+  const [lyricsResult, geniusUrl, deezerGenre] = await Promise.all([
     findLyrics({
       title: candidate.title,
       artist: candidate.artist,
@@ -104,6 +141,8 @@ async function analyzeCandidate(
       durationMs: candidate.duration_ms,
     }),
     findGeniusSongUrl(candidate.title, candidate.artist, process.env.GENIUS_ACCESS_TOKEN),
+    // Deezer's genre is real catalog data; the model only makes it more specific
+    findDeezerGenre({ deezerId: candidate.deezer_id, isrc: candidate.isrc }),
   ])
   if (!lyricsResult.lyrics) {
     log.warn('pipeline', 'skipping track without lyrics', { track: label, reason: lyricsResult.reason })
@@ -124,6 +163,7 @@ async function analyzeCandidate(
     title: candidate.title,
     artist: candidate.artist,
     lyrics: lyricsResult.lyrics,
+    genreHint: deezerGenre,
   })
   log.info('pipeline', 'track analyzed', { track: label, emotion: analysis.emotion, model: analysis.model })
 
@@ -133,12 +173,17 @@ async function analyzeCandidate(
       ...candidate,
       genius_url: geniusUrl,
       emotion: analysis.emotion,
+      secondary_emotion: analysis.secondary_emotion,
       valence: analysis.valence,
       energy: analysis.energy,
-      genre: analysis.genre || null,
-      mood_description: analysis.mood_description || null,
-      lyrical_style: analysis.lyrical_style || null,
+      addressee: analysis.addressee,
+      stance: analysis.stance,
+      themes: analysis.themes,
+      genre: analysis.genre || deezerGenre?.toLowerCase() || null,
+      mood_description: analysis.take || null,
+      lyrical_style: analysis.style || null,
       analysis_model: analysis.model,
+      analysis_version: ANALYSIS_VERSION,
       analyzed_at: new Date().toISOString(),
     },
     existingId,
@@ -159,7 +204,7 @@ async function addCandidate(
   })
   if (sameSourceRow?.analyzed_at) {
     log.info('pipeline', 'reusing analyzed track', { trackId: sameSourceRow.id, match: 'source id' })
-    return linkToNucleus(ctx, sameSourceRow)
+    return addFromCatalog(ctx, sameSourceRow, onProgress)
   }
 
   if (candidate.isrc) {
@@ -173,7 +218,7 @@ async function addCandidate(
         await linkTrackSource(getAdminClient(), sameRecording.id, missingIds)
       }
       log.info('pipeline', 'reusing analyzed track', { trackId: sameRecording.id, match: 'isrc' })
-      return linkToNucleus(ctx, sameRecording)
+      return addFromCatalog(ctx, sameRecording, onProgress)
     }
   }
 
@@ -184,8 +229,7 @@ async function addCandidate(
 export async function addSpotifyTrack(ctx: NucleusContext, spotifyId: string, onProgress?: OnProgress): Promise<AddTrackResult> {
   const known = await findTrackBySpotifyId(ctx.db, spotifyId)
   if (known?.analyzed_at) {
-    reportCached(known, onProgress)
-    return linkToNucleus(ctx, known)
+    return addFromCatalog(ctx, known, onProgress)
   }
 
   let metadata: SpotifyMetadata
@@ -207,8 +251,7 @@ export async function addDeezerTrack(
   const deezerId = typeof track === 'number' ? track : track.id
   const known = await findTrackByDeezerId(ctx.db, deezerId)
   if (known?.analyzed_at) {
-    reportCached(known, onProgress)
-    return linkToNucleus(ctx, known)
+    return addFromCatalog(ctx, known, onProgress)
   }
 
   let full: DeezerTrack

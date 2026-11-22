@@ -6,7 +6,8 @@ import type { NucleusVisualizationHandle } from '../../../components/NucleusVisu
 import { NucleusChat } from '../../../components/NucleusChat'
 import { AiConnectionPanel } from '../../../components/AiConnectionPanel'
 import { AccountPanel } from '../../../components/AccountPanel'
-import { TrackListView, type NucleusOption, type TransferTarget } from '../../../components/TrackListView'
+import { ImpressionCard } from '../../../components/ImpressionCard'
+import { TrackListView, songSignals, type NucleusOption, type TransferTarget } from '../../../components/TrackListView'
 import { PulseDot, primaryButtonClass } from '../../../components/ui'
 import type { Track } from '../../../types/track'
 import { MAX_NUCLEI } from '../../../types/nucleus'
@@ -16,11 +17,11 @@ import { isEmptyImport, parseImportInput } from '../../../lib/import-input'
 import { importSongs, type ImportProgress } from '../../../lib/import-client'
 import {
   ApiError,
-  autoNameNucleus,
   createNucleus,
   getNucleus,
   listNuclei,
   listTracks,
+  readNucleus,
   removeTracks,
   renameNucleus as renameNucleusRequest,
   transferTracks,
@@ -103,6 +104,9 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
     stage: string | null
   } | null>(null)
   const [nucleusName, setNucleusName] = useState('The Nucleus')
+  const [impression, setImpression] = useState<{ text: string | null; trackCount: number | null }>({ text: null, trackCount: null })
+  const [isReading, setIsReading] = useState(false)
+  const [readError, setReadError] = useState<string | null>(null)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null)
@@ -474,6 +478,7 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
     try {
       const data = await getNucleus(nucleusId)
       setNucleusName(data.nucleus.name)
+      setImpression({ text: data.nucleus.impression, trackCount: data.nucleus.impression_track_count })
     } catch (error) {
       if (error instanceof ApiError && (error.status === 404 || error.status === 400)) setNotFound(true)
       else console.error('Failed to load nucleus:', error)
@@ -604,10 +609,11 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
         setAiPanelRefresh(n => n + 1)
       }
 
-      // Rename the nucleus every time the collection passes a multiple of 5 tracks
+      // Read the nucleus again when it's new, or each time it passes a multiple of 10 songs
+      // (each read is one of the user's free AI requests)
       const newCount = previousCount + data.successCount
-      if (data.successCount > 0 && Math.floor(newCount / 5) > Math.floor(previousCount / 5)) {
-        await renameNucleus()
+      if (data.successCount > 0 && !data.aiError && (impression.text === null || Math.floor(newCount / 10) > Math.floor(previousCount / 10))) {
+        await refreshRead()
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unknown error')
@@ -625,16 +631,21 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
     }
   }
 
-  const renameNucleus = async () => {
+  const refreshRead = async () => {
+    setIsReading(true)
+    setReadError(null)
     try {
-      const data = await autoNameNucleus(nucleusId)
-      if (data.name) {
-        setNucleusName(data.name)
-      }
+      const data = await readNucleus(nucleusId)
+      setNucleusName(data.name)
+      setImpression({ text: data.impression, trackCount: data.impressionTrackCount })
     } catch (error) {
-      console.error('Failed to rename nucleus:', error)
+      setReadError(error instanceof Error ? error.message : 'Could not read this nucleus')
+      if (error instanceof ApiError && error.code === 'ai_not_connected') setAiPanelRefresh((n) => n + 1)
+    } finally {
+      setIsReading(false)
     }
   }
+
 
   const handleOrbitClick = (orbitInfo: OrbitInfo | null) => {
     if (orbitInfo) {
@@ -823,6 +834,15 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
           }`}
         >
           <div className="mx-auto max-w-5xl px-4 pt-20 sm:px-6">
+<ImpressionCard
+              impression={impression.text}
+              readWithTracks={impression.trackCount}
+              trackCount={tracks.length}
+              busy={isReading}
+              error={readError}
+              onRead={refreshRead}
+              className="mb-5"
+            />
             <TrackListView
               tracks={tracks}
               otherNuclei={otherNuclei}
@@ -839,6 +859,19 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
           </div>
         </div>
       ) : (
+      <>
+      {!selectedTrack && !isChatOpen && (
+        <div className="fixed left-4 top-16 z-40 w-[min(380px,calc(100%-2rem))]">
+          <ImpressionCard
+            impression={impression.text}
+            readWithTracks={impression.trackCount}
+            trackCount={tracks.length}
+            busy={isReading}
+            error={readError}
+            onRead={refreshRead}
+          />
+        </div>
+      )}
       <div className={`fixed inset-0 transition-[right] duration-300 ${sidebarCollapsed ? 'right-0' : 'right-80'}`}>
         <NucleusVisualization
           ref={visualizationRef}
@@ -850,6 +883,7 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
           audioEnergy={playingTrack?.energy ?? undefined}
         />
       </div>
+      </>
       )}
 
       {/* Sidebar */}
@@ -1221,6 +1255,9 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
             )}
             {selectedTrack.mood_description && (
               <p className="tooltip-mood">{selectedTrack.mood_description}</p>
+            )}
+            {(selectedTrack.addressee || selectedTrack.stance || selectedTrack.themes.length > 0) && (
+              <p className="tooltip-genre">{songSignals(selectedTrack)}</p>
             )}
 
             {/* Switch track confirmation */}

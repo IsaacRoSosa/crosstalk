@@ -19,6 +19,8 @@ export interface NucleusSummary {
   id: number
   name: string
   dominantEmotion: Emotion | null
+  // The AI's first impression of the person, from these songs (null until read)
+  impression: string | null
   createdAt: string
   updatedAt: string
   trackCount: number

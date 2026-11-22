@@ -14,6 +14,7 @@ function emptySummary(row: NucleusRow): NucleusSummary {
     id: row.id,
     name: row.name,
     dominantEmotion: null,
+    impression: null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     trackCount: 0,

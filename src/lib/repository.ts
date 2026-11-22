@@ -2,7 +2,7 @@
 // Functions that take `db` run as the signed-in user (Row Level Security applies);
 // functions that take `admin` write the shared catalog and must only be called on the server.
 
-import { isEmotion, type Emotion, type Track } from '../types/track'
+import { ADDRESSEES, STANCES, isEmotion, oneOf, type Emotion, type Track } from '../types/track'
 import { MAX_SUMMARY_COVERS, type NucleusSummary } from '../types/nucleus'
 import type { ChatMessage } from '../types/chat'
 import type { Db } from './supabase/server'
@@ -25,7 +25,7 @@ export async function getNucleus(db: Db, nucleusId: number): Promise<NucleusRow 
 export async function listNucleusSummaries(db: Db): Promise<NucleusSummary[]> {
   const { data, error } = await db
     .from('nuclei')
-    .select('id, name, dominant_emotion, created_at, updated_at, nucleus_tracks(added_at, track:tracks(emotion, cover_url, analyzed_at))')
+    .select('id, name, dominant_emotion, impression, created_at, updated_at, nucleus_tracks(added_at, track:tracks(emotion, cover_url, analyzed_at))')
     .order('created_at', { ascending: true })
   if (error) throw error
 
@@ -46,6 +46,7 @@ export async function listNucleusSummaries(db: Db): Promise<NucleusSummary[]> {
       id: row.id,
       name: row.name,
       dominantEmotion: isEmotion(row.dominant_emotion) ? row.dominant_emotion : null,
+      impression: row.impression,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       trackCount: links.length,
@@ -82,7 +83,7 @@ export async function deleteNucleus(db: Db, nucleusId: number): Promise<void> {
 export async function updateNucleus(
   db: Db,
   nucleusId: number,
-  patch: { name?: string; dominant_emotion?: string | null },
+  patch: { name?: string; name_is_custom?: boolean; dominant_emotion?: string | null },
 ): Promise<NucleusRow> {
   const { data, error } = await db.from('nuclei').update(patch).eq('id', nucleusId).select('*').single()
   if (error) throw error
@@ -107,6 +108,10 @@ export function toTrack(row: TrackRow, addedAt: string): Track {
     youtube_video_id: row.youtube_video_id,
     genius_url: row.genius_url,
     emotion: isEmotion(row.emotion) ? row.emotion : 'calm',
+    secondary_emotion: isEmotion(row.secondary_emotion) ? row.secondary_emotion : null,
+    addressee: oneOf(ADDRESSEES, row.addressee),
+    stance: oneOf(STANCES, row.stance),
+    themes: row.themes ?? [],
     valence: row.valence,
     energy: row.energy,
     genre: row.genre,

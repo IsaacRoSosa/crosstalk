@@ -2,7 +2,7 @@
 // select (shift-click for a range), then remove, or move/copy to another nucleus.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Pause, Play, Search, X } from 'lucide-react'
-import { EMOTIONS, type Emotion, type Track } from '../types/track'
+import { EMOTIONS, type Addressee, type Emotion, type Track } from '../types/track'
 
 export interface NucleusOption {
   id: number
@@ -63,6 +63,27 @@ function formatAdded(iso: string): string {
   if (days === 1) return 'yesterday'
   if (days < 30) return `${days}d ago`
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+const SUNG_TO: Record<Addressee, string> = {
+  ex: 'sung to an ex',
+  partner: 'sung to a partner',
+  crush: 'sung to a crush',
+  self: 'sung to themself',
+  friend: 'sung to a friend',
+  family: 'sung to family',
+  everyone: 'sung to everyone',
+  nobody: 'sung to no one in particular',
+}
+
+// "sung to an ex · longing · leaving, pride" for songs read with the newer analysis
+export function songSignals(track: Track): string {
+  const parts: string[] = []
+  if (track.addressee) parts.push(SUNG_TO[track.addressee])
+  if (track.stance) parts.push(track.stance)
+  if (track.secondary_emotion) parts.push(`${track.emotion} + ${track.secondary_emotion}`)
+  if (track.themes.length) parts.push(track.themes.join(', '))
+  return parts.join(' · ')
 }
 
 function Meter({ value }: { value: number | null }) {
@@ -433,7 +454,10 @@ export function TrackListView({
               </div>
               {isOpen && (
                 <div className="mb-3 ml-[4.5rem] mr-10 space-y-2 text-[11px] leading-relaxed text-white/60">
-                  {track.mood_description && <p>{track.mood_description}</p>}
+                  {track.mood_description && <p className="text-white/80">{track.mood_description}</p>}
+                  {(track.addressee || track.stance || track.themes.length > 0) && (
+                    <p className="text-white/45">{songSignals(track)}</p>
+                  )}
                   {track.lyrical_style && (
                     <p>
                       <span className="text-white/35">style:</span> {track.lyrical_style}

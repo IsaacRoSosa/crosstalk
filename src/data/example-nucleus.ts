@@ -5,7 +5,10 @@ import type { Track } from '../types/track'
 
 export const EXAMPLE_NUCLEUS_NAME = 'Neon Heartache'
 
-export const EXAMPLE_TRACKS: Track[] = [
+// Read with the prototype's analysis, before songs had addressee, stance and themes
+type PrototypeTrack = Omit<Track, 'secondary_emotion' | 'addressee' | 'stance' | 'themes'>
+
+const PROTOTYPE_TRACKS: PrototypeTrack[] = [
   {
     "id": -1,
     "spotify_id": "7FOgcfdz9Nx5V9lCNXdBYv",
@@ -327,3 +330,11 @@ export const EXAMPLE_TRACKS: Track[] = [
     "added_at": "2026-01-29T05:14:34Z"
   }
 ]
+
+export const EXAMPLE_TRACKS: Track[] = PROTOTYPE_TRACKS.map((track) => ({
+  ...track,
+  secondary_emotion: null,
+  addressee: null,
+  stance: null,
+  themes: [],
+}))

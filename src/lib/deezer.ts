@@ -10,7 +10,7 @@ export interface DeezerTrack {
   isrc?: string
   duration: number // seconds
   artist: { name: string }
-  album: { title: string; cover_xl?: string; cover_big?: string }
+  album: { id?: number; title: string; cover_xl?: string; cover_big?: string }
 }
 
 async function deezerGet<T>(path: string): Promise<T> {
@@ -28,6 +28,23 @@ async function deezerGet<T>(path: string): Promise<T> {
 
 export function fetchDeezerTrack(trackId: number): Promise<DeezerTrack> {
   return deezerGet<DeezerTrack>(`/track/${trackId}`)
+}
+
+// The genre Deezer files a song's album under (e.g. "Rap/Hip Hop", "Alternative"). Found by Deezer id,
+// or by ISRC for songs that came from Spotify. Best effort: null when Deezer doesn't know it.
+export async function findDeezerGenre(song: { deezerId?: number | null; isrc?: string | null }): Promise<string | null> {
+  try {
+    const track = song.deezerId
+      ? await fetchDeezerTrack(song.deezerId)
+      : song.isrc
+        ? await deezerGet<DeezerTrack>(`/track/isrc:${encodeURIComponent(song.isrc)}`)
+        : null
+    if (!track?.album?.id) return null
+    const album = await deezerGet<{ genres?: { data?: Array<{ name: string }> } }>(`/album/${track.album.id}`)
+    return album.genres?.data?.[0]?.name ?? null
+  } catch {
+    return null
+  }
 }
 
 export async function fetchDeezerPlaylistTracks(playlistId: number, maxTracks = 100): Promise<DeezerTrack[]> {

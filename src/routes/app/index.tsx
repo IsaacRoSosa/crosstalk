@@ -280,6 +280,12 @@ function PlanetCard({
         </div>
       )}
 
+      {nucleus.impression && (
+        <button onClick={open} className="mt-3 max-w-[290px] text-left">
+          <p className="line-clamp-3 text-[11px] leading-relaxed text-white/55 hover:text-white/75">{nucleus.impression}</p>
+        </button>
+      )}
+
       {mode === 'delete' ? (
         <div className="mt-3 text-[11px] text-white/70">
           delete it and its chat? songs stay in your other nuclei.

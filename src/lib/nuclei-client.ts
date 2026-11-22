@@ -36,17 +36,32 @@ export const listNuclei = () => call<NucleusLibrary>('/api/nuclei')
 export const createNucleus = (options: { name?: string; mode?: 'onboarding' } = {}) =>
   call<{ nucleus: NucleusSummary; created: boolean }>('/api/nuclei', send('POST', options))
 
-export const getNucleus = (nucleusId: number) =>
-  call<{ nucleus: { id: number; name: string; dominant_emotion: string | null } }>(`/api/nuclei/${nucleusId}`)
+export interface NucleusDetails {
+  id: number
+  name: string
+  dominant_emotion: string | null
+  impression: string | null
+  impression_track_count: number | null
+  impression_updated_at: string | null
+}
+
+export const getNucleus = (nucleusId: number) => call<{ nucleus: NucleusDetails }>(`/api/nuclei/${nucleusId}`)
 
 export const renameNucleus = (nucleusId: number, name: string) =>
   call<{ nucleus: { id: number; name: string } }>(`/api/nuclei/${nucleusId}`, send('PATCH', { name }))
 
 export const deleteNucleus = (nucleusId: number) => call<{ success: true }>(`/api/nuclei/${nucleusId}`, send('DELETE'))
 
-// Lets the AI name the nucleus after its songs
-export const autoNameNucleus = (nucleusId: number) =>
-  call<{ name: string; dominantEmotion: string | null }>(`/api/nuclei/${nucleusId}/name`, send('POST'))
+export interface NucleusRead {
+  name: string
+  impression: string
+  impressionTrackCount: number
+  impressionUpdatedAt: string
+  dominantEmotion: string | null
+}
+
+// Has the AI read the nucleus as a whole: a first impression, and a name (unless the user set one)
+export const readNucleus = (nucleusId: number) => call<NucleusRead>(`/api/nuclei/${nucleusId}/read`, send('POST'))
 
 export const listTracks = (nucleusId: number) => call<{ tracks: Track[] }>(`/api/tracks?nucleus=${nucleusId}`)
 

@@ -75,6 +75,10 @@ export type Database = {
       }
       nuclei: {
         Row: {
+          impression: string | null
+          impression_track_count: number | null
+          impression_updated_at: string | null
+          name_is_custom: boolean
           created_at: string
           dominant_emotion: string | null
           id: number
@@ -83,6 +87,10 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          impression?: string | null
+          impression_track_count?: number | null
+          impression_updated_at?: string | null
+          name_is_custom?: boolean
           created_at?: string
           dominant_emotion?: string | null
           id?: never
@@ -91,6 +99,10 @@ export type Database = {
           user_id: string
         }
         Update: {
+          impression?: string | null
+          impression_track_count?: number | null
+          impression_updated_at?: string | null
+          name_is_custom?: boolean
           created_at?: string
           dominant_emotion?: string | null
           id?: never
@@ -159,6 +171,11 @@ export type Database = {
       }
       tracks: {
         Row: {
+          addressee: string | null
+          analysis_version: number
+          secondary_emotion: string | null
+          stance: string | null
+          themes: string[] | null
           album: string | null
           analysis_model: string | null
           analyzed_at: string | null
@@ -181,6 +198,11 @@ export type Database = {
           youtube_video_id: string | null
         }
         Insert: {
+          addressee?: string | null
+          analysis_version?: number
+          secondary_emotion?: string | null
+          stance?: string | null
+          themes?: string[] | null
           album?: string | null
           analysis_model?: string | null
           analyzed_at?: string | null
@@ -203,6 +225,11 @@ export type Database = {
           youtube_video_id?: string | null
         }
         Update: {
+          addressee?: string | null
+          analysis_version?: number
+          secondary_emotion?: string | null
+          stance?: string | null
+          themes?: string[] | null
           album?: string | null
           analysis_model?: string | null
           analyzed_at?: string | null

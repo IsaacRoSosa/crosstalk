@@ -27,7 +27,7 @@ import { Route as ApiTracksVideoRouteImport } from './routes/api/tracks/video'
 import { Route as AppNNucleusIdRouteImport } from './routes/app/n/$nucleusId'
 import { Route as ApiAiOpenrouterExchangeRouteImport } from './routes/api/ai/openrouter/exchange'
 import { Route as ApiNucleiNucleusIdIndexRouteImport } from './routes/api/nuclei/$nucleusId/index'
-import { Route as ApiNucleiNucleusIdNameRouteImport } from './routes/api/nuclei/$nucleusId/name'
+import { Route as ApiNucleiNucleusIdReadRouteImport } from './routes/api/nuclei/$nucleusId/read'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -119,9 +119,9 @@ const ApiNucleiNucleusIdIndexRoute = ApiNucleiNucleusIdIndexRouteImport.update({
   path: '/api/nuclei/$nucleusId/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiNucleiNucleusIdNameRoute = ApiNucleiNucleusIdNameRouteImport.update({
-  id: '/api/nuclei/$nucleusId/name',
-  path: '/api/nuclei/$nucleusId/name',
+const ApiNucleiNucleusIdReadRoute = ApiNucleiNucleusIdReadRouteImport.update({
+  id: '/api/nuclei/$nucleusId/read',
+  path: '/api/nuclei/$nucleusId/read',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -143,7 +143,7 @@ export interface FileRoutesByFullPath {
   '/api/nuclei/': typeof ApiNucleiIndexRoute
   '/api/tracks/': typeof ApiTracksIndexRoute
   '/api/ai/openrouter/exchange': typeof ApiAiOpenrouterExchangeRoute
-  '/api/nuclei/$nucleusId/name': typeof ApiNucleiNucleusIdNameRoute
+  '/api/nuclei/$nucleusId/read': typeof ApiNucleiNucleusIdReadRoute
   '/api/nuclei/$nucleusId/': typeof ApiNucleiNucleusIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -164,7 +164,7 @@ export interface FileRoutesByTo {
   '/api/nuclei': typeof ApiNucleiIndexRoute
   '/api/tracks': typeof ApiTracksIndexRoute
   '/api/ai/openrouter/exchange': typeof ApiAiOpenrouterExchangeRoute
-  '/api/nuclei/$nucleusId/name': typeof ApiNucleiNucleusIdNameRoute
+  '/api/nuclei/$nucleusId/read': typeof ApiNucleiNucleusIdReadRoute
   '/api/nuclei/$nucleusId': typeof ApiNucleiNucleusIdIndexRoute
 }
 export interface FileRoutesById {
@@ -186,7 +186,7 @@ export interface FileRoutesById {
   '/api/nuclei/': typeof ApiNucleiIndexRoute
   '/api/tracks/': typeof ApiTracksIndexRoute
   '/api/ai/openrouter/exchange': typeof ApiAiOpenrouterExchangeRoute
-  '/api/nuclei/$nucleusId/name': typeof ApiNucleiNucleusIdNameRoute
+  '/api/nuclei/$nucleusId/read': typeof ApiNucleiNucleusIdReadRoute
   '/api/nuclei/$nucleusId/': typeof ApiNucleiNucleusIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -209,7 +209,7 @@ export interface FileRouteTypes {
     | '/api/nuclei/'
     | '/api/tracks/'
     | '/api/ai/openrouter/exchange'
-    | '/api/nuclei/$nucleusId/name'
+    | '/api/nuclei/$nucleusId/read'
     | '/api/nuclei/$nucleusId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -230,7 +230,7 @@ export interface FileRouteTypes {
     | '/api/nuclei'
     | '/api/tracks'
     | '/api/ai/openrouter/exchange'
-    | '/api/nuclei/$nucleusId/name'
+    | '/api/nuclei/$nucleusId/read'
     | '/api/nuclei/$nucleusId'
   id:
     | '__root__'
@@ -251,7 +251,7 @@ export interface FileRouteTypes {
     | '/api/nuclei/'
     | '/api/tracks/'
     | '/api/ai/openrouter/exchange'
-    | '/api/nuclei/$nucleusId/name'
+    | '/api/nuclei/$nucleusId/read'
     | '/api/nuclei/$nucleusId/'
   fileRoutesById: FileRoutesById
 }
@@ -273,7 +273,7 @@ export interface RootRouteChildren {
   ApiNucleiIndexRoute: typeof ApiNucleiIndexRoute
   ApiTracksIndexRoute: typeof ApiTracksIndexRoute
   ApiAiOpenrouterExchangeRoute: typeof ApiAiOpenrouterExchangeRoute
-  ApiNucleiNucleusIdNameRoute: typeof ApiNucleiNucleusIdNameRoute
+  ApiNucleiNucleusIdReadRoute: typeof ApiNucleiNucleusIdReadRoute
   ApiNucleiNucleusIdIndexRoute: typeof ApiNucleiNucleusIdIndexRoute
 }
 
@@ -405,11 +405,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiNucleiNucleusIdIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/nuclei/$nucleusId/name': {
-      id: '/api/nuclei/$nucleusId/name'
-      path: '/api/nuclei/$nucleusId/name'
-      fullPath: '/api/nuclei/$nucleusId/name'
-      preLoaderRoute: typeof ApiNucleiNucleusIdNameRouteImport
+    '/api/nuclei/$nucleusId/read': {
+      id: '/api/nuclei/$nucleusId/read'
+      path: '/api/nuclei/$nucleusId/read'
+      fullPath: '/api/nuclei/$nucleusId/read'
+      preLoaderRoute: typeof ApiNucleiNucleusIdReadRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -433,7 +433,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiNucleiIndexRoute: ApiNucleiIndexRoute,
   ApiTracksIndexRoute: ApiTracksIndexRoute,
   ApiAiOpenrouterExchangeRoute: ApiAiOpenrouterExchangeRoute,
-  ApiNucleiNucleusIdNameRoute: ApiNucleiNucleusIdNameRoute,
+  ApiNucleiNucleusIdReadRoute: ApiNucleiNucleusIdReadRoute,
   ApiNucleiNucleusIdIndexRoute: ApiNucleiNucleusIdIndexRoute,
 }
 export const routeTree = rootRouteImport

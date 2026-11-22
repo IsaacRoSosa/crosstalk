@@ -1,45 +1,86 @@
-// What Crosstalk asks the AI: analyse lyrics, name a nucleus, and chat.
+// What Crosstalk asks the AI: read a song's lyrics, read a whole nucleus, and chat.
+//
+// Voice: like a perceptive friend who just scrolled through your recently played. Plain, specific,
+// lowercase, a little teasing. Not a critic, not a therapist, not a horoscope.
 import { HttpError } from '../http'
 import { log } from '../log'
 import { chatCompletion, type ChatMessage } from './openrouter'
-import { isEmotion, type Emotion } from '../../types/track'
+import { ADDRESSEES, EMOTIONS, STANCES, oneOf, type Addressee, type Emotion, type Stance } from '../../types/track'
+
+// Bump when the song prompt changes in a way worth re-reading old songs for (see track-pipeline.ts)
+export const ANALYSIS_VERSION = 2
 
 export interface LyricsAnalysis {
   emotion: Emotion
+  secondary_emotion: Emotion | null
   valence: number
   energy: number
+  addressee: Addressee | null
+  stance: Stance | null
+  themes: string[]
+  // One short line on what the song is really doing
+  take: string
+  // A few words on how it's written
+  style: string
   genre: string
-  mood_description: string
-  lyrical_style: string
   model: string
 }
 
-const LYRICS_ANALYSIS_PROMPT = `Analyze these song lyrics and provide an emotional and stylistic analysis.
+// Words that make text read like a model wrote it. Listed in the prompts, and checked afterwards.
+const AI_TELLS = [
+  'explores',
+  'delves',
+  'conveys',
+  'captures',
+  'poignant',
+  'tapestry',
+  'journey',
+  'resonates',
+  'evocative',
+  'juxtapos',
+  'navigat',
+  'testament',
+  'a blend of',
+  'raw emotion',
+  'vulnerability',
+]
+// Openings that give it away too
+const AI_OPENINGS = ['the lyrics', 'the song', 'this song', 'this track']
 
-Song: "{title}" by {artist}
+function soundsGenerated(text: string): boolean {
+  const lower = text.toLowerCase()
+  return AI_TELLS.some((tell) => lower.includes(tell)) || AI_OPENINGS.some((opening) => lower.startsWith(opening))
+}
+
+const SONG_PROMPT = `You read song lyrics and say what a song is really about, the way a perceptive friend would. Not a critic, not a therapist.
+
+Song: "{title}" by {artist}{genreHint}
 
 Lyrics:
 {lyrics}
 
-Return your response in the following JSON format:
+Reply with only this JSON, nothing else:
 {
-  "emotion": "<one of: joy, sadness, anger, fear, love, surprise, calm, nostalgia>",
-  "valence": <0.0 to 1.0>,
-  "energy": <0.0 to 1.0>,
-  "genre": "<inferred genre from lyrical style>",
-  "mood_description": "<2-3 sentence description of the emotional content and themes>",
-  "lyrical_style": "<description of the lyrical style, writing approach, and poetic devices>"
+  "emotion": "the feeling the song leaves you with. one of: ${EMOTIONS.join(', ')}",
+  "secondary_emotion": "another one from that list if the song is genuinely mixed, otherwise null",
+  "valence": "number from 0.0 (dark) to 1.0 (bright), for the lyrics",
+  "energy": "number from 0.0 (restrained) to 1.0 (intense), for the lyrics",
+  "addressee": "who the singer is talking to. one of: ${ADDRESSEES.join(', ')}",
+  "stance": "the singer's attitude. one of: ${STANCES.join(', ')}",
+  "themes": ["2 or 3 short lowercase themes, 1 to 3 words each"],
+  "take": "one sentence, at most 18 words, saying what the song is doing",
+  "style": "2 to 4 short lowercase descriptors of how it's written, comma separated",
+  "genre": "the genre, 1 to 3 lowercase words"
 }
 
-Guidelines:
-- emotion: Choose the PRIMARY emotion from the 8 options that best represents the lyrics
-- valence: 0.0 = negative/sad themes, 1.0 = positive/uplifting themes
-- energy: 0.0 = calm/introspective, 1.0 = intense/passionate
-- genre: Infer from lyrical style (e.g., "indie folk", "hip-hop", "alternative rock", "pop ballad")
-- mood_description: Capture the emotional essence and themes explored in the lyrics
-- lyrical_style: Describe the writing style, metaphors used, narrative approach
-
-Return ONLY the JSON, no markdown formatting or additional text.`
+How to write "take":
+- plain and specific, like you'd tell a friend. lowercase. no exclamation marks.
+- never start with "the song", "the lyrics", "this track", or the title. never quote the lyrics.
+- don't use: ${AI_TELLS.join(', ')}
+- good: "a breakup song that's mostly about not wanting to be the one who cares more"
+- good: "bragging on the surface, but every verse circles back to feeling left out"
+- good: "pure crush energy, the kind where you rehearse texts you'll never send"
+- bad: "The lyrics convey a poignant exploration of love and loss."`
 
 // Free models are long-context, but there's no need to send an entire 10-minute epic
 const MAX_LYRICS_CHARS = 6000
@@ -49,62 +90,136 @@ function clamp01(value: unknown): number {
   return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.5
 }
 
-function parseAnalysis(text: string): Omit<LyricsAnalysis, 'model'> | null {
-  const match = text.match(/\{[\s\S]*\}/)
+function cleanLine(value: unknown, max: number): string {
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .replace(/^["']|["']$/g, '')
+    .trim()
+    .slice(0, max)
+}
+
+function lowerFirst(text: string): string {
+  return text.charAt(0).toLowerCase() + text.slice(1)
+}
+
+function extractJson(text: string): Record<string, unknown> | null {
+  const match = text.replace(/<think>[\s\S]*?<\/think>/g, '').match(/\{[\s\S]*\}/)
   if (!match) return null
   try {
-    const raw = JSON.parse(match[0])
-    const emotion = typeof raw.emotion === 'string' ? raw.emotion.toLowerCase().trim() : raw.emotion
-    if (!isEmotion(emotion)) return null
-    return {
-      emotion,
-      valence: clamp01(raw.valence),
-      energy: clamp01(raw.energy),
-      genre: String(raw.genre ?? '').slice(0, 100),
-      mood_description: String(raw.mood_description ?? '').slice(0, 1000),
-      lyrical_style: String(raw.lyrical_style ?? raw.vocal_characteristics ?? '').slice(0, 1000),
-    }
+    return JSON.parse(match[0])
   } catch {
     return null
+  }
+}
+
+function parseAnalysis(text: string): Omit<LyricsAnalysis, 'model'> | null {
+  const raw = extractJson(text)
+  if (!raw) return null
+  const emotion = oneOf(EMOTIONS, raw.emotion)
+  const take = cleanLine(raw.take ?? raw.mood_description, 240)
+  if (!emotion || !take) return null
+  const secondary = oneOf(EMOTIONS, raw.secondary_emotion)
+  const themes = (Array.isArray(raw.themes) ? raw.themes : [])
+    .map((t) => cleanLine(t, 40).toLowerCase())
+    .filter(Boolean)
+    .slice(0, 3)
+  return {
+    emotion,
+    secondary_emotion: secondary && secondary !== emotion ? secondary : null,
+    valence: clamp01(raw.valence),
+    energy: clamp01(raw.energy),
+    addressee: oneOf(ADDRESSEES, raw.addressee),
+    stance: oneOf(STANCES, raw.stance),
+    themes,
+    // Lowercase is part of the voice; models often capitalise anyway
+    take: lowerFirst(take),
+    style: cleanLine(raw.style ?? raw.lyrical_style, 120).toLowerCase(),
+    genre: cleanLine(raw.genre, 60).toLowerCase(),
   }
 }
 
 export async function analyzeLyrics(
   userId: string,
   apiKey: string,
-  song: { title: string; artist: string; lyrics: string },
+  song: { title: string; artist: string; lyrics: string; genreHint?: string | null },
 ): Promise<LyricsAnalysis> {
-  const prompt = LYRICS_ANALYSIS_PROMPT.replace('{title}', song.title)
+  const prompt = SONG_PROMPT.replace('{title}', song.title)
     .replace('{artist}', song.artist)
+    .replace('{genreHint}', song.genreHint ? `\nFiled under: ${song.genreHint}` : '')
     .replace('{lyrics}', song.lyrics.slice(0, MAX_LYRICS_CHARS))
 
-  // Free models sometimes return malformed JSON; one retry fixes most of it
+  // Free models sometimes return malformed JSON or slip into essay voice; one retry fixes most of it
+  let fallback: LyricsAnalysis | null = null
   for (let attempt = 1; attempt <= 2; attempt++) {
-    const { text, model } = await chatCompletion(userId, apiKey, [{ role: 'user', content: prompt }], { temperature: 0.3 })
+    const { text, model } = await chatCompletion(userId, apiKey, [{ role: 'user', content: prompt }], { temperature: 0.5 })
     const analysis = parseAnalysis(text)
-    if (analysis) return { ...analysis, model }
-    log.warn('analysis', 'unparseable analysis', { track: `${song.title} - ${song.artist}`, model, attempt, preview: text.slice(0, 200) })
+    if (analysis && !soundsGenerated(analysis.take)) return { ...analysis, model }
+    if (analysis) fallback ??= { ...analysis, model }
+    log.warn('analysis', analysis ? 'take sounds generated' : 'unparseable analysis', {
+      track: `${song.title} - ${song.artist}`,
+      model,
+      attempt,
+      preview: (analysis?.take ?? text).slice(0, 200),
+    })
   }
+  // Better a slightly stiff line than no song at all
+  if (fallback) return fallback
   throw new HttpError(502, 'The AI returned an unexpected analysis. Please try again.', { code: 'ai_bad_output' })
 }
 
-export async function generateNucleusName(
-  userId: string,
-  apiKey: string,
-  collection: { trackCount: number; topEmotions: string[]; genres: string[]; moodDescriptions: string[] },
-): Promise<string> {
-  const prompt = `Generate a short poetic name (2-4 words) for this music collection:
-- ${collection.trackCount} tracks
-- Dominant emotions: ${collection.topEmotions.join(', ')}
-- Genres: ${collection.genres.join(', ')}
-- Sample moods: ${collection.moodDescriptions.slice(0, 3).join(', ')}
+// ── Reading a whole nucleus ───────────────────────────────────────────────────
 
-Return ONLY the name, nothing else. Make it evocative and beautiful.`
+const READ_PROMPT = `You're giving someone a first impression of them, based only on the songs they keep playing. Like a friend who just scrolled through their recently played: observant, specific, a little teasing, warm underneath. Not a therapist, not a horoscope.
 
-  const { text } = await chatCompletion(userId, apiKey, [{ role: 'user', content: prompt }], { temperature: 0.9 })
-  // Keep the first line, without quotes or markdown
-  return text.split('\n').find((line) => line.trim())?.replace(/["'*_#`]/g, '').trim() ?? ''
+What their songs show:
+{facts}
+
+The songs:
+{songs}
+
+Reply with only this JSON, nothing else:
+{"name": "...", "impression": "..."}
+
+"name": 2 to 4 lowercase words naming this collection, like a playlist someone would actually make. specific to these songs. never use: symphony, echoes, tapestry, whispers, melodies, chronicles, odyssey.
+"impression": 3 or 4 short sentences, under 70 words total, talking to them as "you".
+- open with the most striking pattern, not a summary
+- name one or two of their songs as evidence
+- include one thing that doesn't fit, or a contradiction
+- lowercase, plain words, no exclamation marks, no lyric quotes
+- no diagnosing and no flattery. never "your music reveals", "it's clear that", "complex", "soul", "journey"
+- it's a guess from music: a little playful is good, mean is not
+
+Example of the voice (about different songs): "you like your heartbreak with a beat. most of these are sung at someone who already left, and none of them are asking them back. then there's that one love song, completely unbothered, like it wandered in from someone else's playlist. you're fine. probably."`
+
+export interface NucleusRead {
+  name: string
+  impression: string
 }
+
+export async function readNucleus(userId: string, apiKey: string, facts: string, songs: string): Promise<NucleusRead> {
+  const prompt = READ_PROMPT.replace('{facts}', facts).replace('{songs}', songs)
+  let fallback: NucleusRead | null = null
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const { text, model } = await chatCompletion(userId, apiKey, [{ role: 'user', content: prompt }], { temperature: 0.8 })
+    const raw = extractJson(text)
+    const name = cleanLine(raw?.name, 80).replace(/["'*_#`]/g, '').toLowerCase()
+    const impression = cleanLine(raw?.impression, 1000)
+    if (name && impression) {
+      const read = { name, impression: lowerFirst(impression) }
+      if (!soundsGenerated(impression)) return read
+      fallback ??= read
+    }
+    log.warn('analysis', name && impression ? 'impression sounds generated' : 'unparseable nucleus read', {
+      model,
+      attempt,
+      preview: text.slice(0, 200),
+    })
+  }
+  if (fallback) return fallback
+  throw new HttpError(502, 'The AI returned an unexpected answer. Please try again.', { code: 'ai_bad_output' })
+}
+
+// ── Chat ─────────────────────────────────────────────────────────────────────
 
 export async function chatReply(
   userId: string,
