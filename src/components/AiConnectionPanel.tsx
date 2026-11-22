@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../lib/api-client'
-import { startOpenRouterConnect } from '../lib/openrouter-connect'
+import { listenForAiConnected, startOpenRouterConnect } from '../lib/openrouter-connect'
 
 interface AiConnectionStatus {
   connected: boolean
@@ -34,11 +34,23 @@ export function AiConnectionPanel({ refreshToken = 0, highlight = false }: AiCon
     loadStatus()
   }, [loadStatus, refreshToken])
 
+  // Connected in the OpenRouter tab: refresh
+  useEffect(
+    () =>
+      listenForAiConnected(() => {
+        setBusy(false)
+        loadStatus()
+      }),
+    [loadStatus],
+  )
+
   const connect = async () => {
     setBusy(true)
     setError(null)
     try {
-      await startOpenRouterConnect()
+      const opened = await startOpenRouterConnect()
+      // In a new tab: keep the button usable in case they need to start over
+      if (opened === 'new_tab') setBusy(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start the connection')
       setBusy(false)

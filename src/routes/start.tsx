@@ -4,7 +4,8 @@ import { NucleusVisualization } from '../components/NucleusVisualization'
 import { Eyebrow, GhostButton, Panel, PanelHeader, PrimaryButton, ghostButtonClass, primaryButtonClass, Wordmark } from '../components/ui'
 import { apiFetch } from '../lib/api-client'
 import { isEmptyImport, parseImportInput, type ParsedImportInput } from '../lib/import-input'
-import { startOpenRouterConnect } from '../lib/openrouter-connect'
+import { listenForAiConnected, startOpenRouterConnect } from '../lib/openrouter-connect'
+import { getTemp, removeTemp, setTemp } from '../lib/temp-storage'
 import type { Track } from '../types/track'
 import '../styles/galaxy.css'
 
@@ -15,8 +16,9 @@ export const Route = createFileRoute('/start')({
 
 type Step = 'music' | 'ai' | 'forming'
 
-// What the person pasted, kept across the OpenRouter redirect and reloads
+// What the person pasted, kept across reloads and the OpenRouter tab (localStorage, for a day)
 const PENDING_IMPORT_KEY = 'crosstalk.pendingImport'
+const PENDING_IMPORT_TTL_MS = 24 * 60 * 60 * 1000
 
 function readStepFromUrl(): Step {
   if (typeof window === 'undefined') return 'music'
@@ -46,7 +48,7 @@ function Start() {
   useEffect(() => {
     const fromUrl = readStepFromUrl()
     // Without pending music there's nothing to connect or form yet
-    setStepState(fromUrl !== 'music' && !sessionStorage.getItem(PENDING_IMPORT_KEY) ? 'music' : fromUrl)
+    setStepState(fromUrl !== 'music' && !getTemp(PENDING_IMPORT_KEY) ? 'music' : fromUrl)
   }, [])
 
   const setStep = useCallback((next: Step) => {
@@ -74,7 +76,7 @@ function MusicStep({ onContinue }: { onContinue: () => void }) {
   const [input, setInput] = useState('')
 
   useEffect(() => {
-    setInput(sessionStorage.getItem(PENDING_IMPORT_KEY) ?? '')
+    setInput(getTemp(PENDING_IMPORT_KEY) ?? '')
   }, [])
 
   const parsed = useMemo(() => parseImportInput(input), [input])
@@ -90,7 +92,7 @@ function MusicStep({ onContinue }: { onContinue: () => void }) {
   const canContinue = (songs > 0 || playlists > 0) && !isEmptyImport(parsed)
 
   const handleContinue = () => {
-    sessionStorage.setItem(PENDING_IMPORT_KEY, input)
+    setTemp(PENDING_IMPORT_KEY, input, PENDING_IMPORT_TTL_MS)
     onContinue()
   }
 
@@ -164,7 +166,23 @@ function AiStep({ onBack, onReady }: { onBack: () => void; onReady: () => void }
   const [checking, setChecking] = useState(true)
   const [agreed, setAgreed] = useState(false)
   const [connecting, setConnecting] = useState(false)
+  // OpenRouter is open in another tab; this page continues when it reports back
+  const [waiting, setWaiting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => listenForAiConnected(onReady), [onReady])
+
+  const checkAgain = async () => {
+    setError(null)
+    try {
+      const res = await apiFetch('/api/ai/connection')
+      const data = await res.json()
+      if (data.connected) onReady()
+      else setError("not connected yet. finish on openrouter's page, or connect again.")
+    } catch {
+      setError('could not check the connection')
+    }
+  }
 
   // Already connected (e.g. a returning user): go straight to forming
   useEffect(() => {
@@ -178,7 +196,11 @@ function AiStep({ onBack, onReady }: { onBack: () => void; onReady: () => void }
     setConnecting(true)
     setError(null)
     try {
-      await startOpenRouterConnect('/start?step=forming')
+      const opened = await startOpenRouterConnect('/start?step=forming')
+      if (opened === 'new_tab') {
+        setWaiting(true)
+        setConnecting(false)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open OpenRouter')
       setConnecting(false)
@@ -232,15 +254,30 @@ function AiStep({ onBack, onReady }: { onBack: () => void; onReady: () => void }
           </span>
         </label>
 
+        {waiting && (
+          <div className="mx-5 mb-5 border border-white/40 p-3.5 text-[11px] leading-relaxed" aria-live="polite">
+            <div className="mb-1 flex items-center gap-2 font-semibold">
+              <span className="ct-pulse-dot inline-block h-1.5 w-1.5" /> waiting for openrouter
+            </div>
+            <p className="text-white/60">
+              finish in the openrouter tab; this page continues on its own. if you just created your openrouter account and
+              it didn't come back here, click connect again: you're signed in now, so it only takes one click.
+            </p>
+          </div>
+        )}
+
         {error && <p className="px-5 pb-4 text-[11px] text-white/70">{error}</p>}
 
         <div className="flex flex-wrap justify-end gap-2.5 border-t border-white/20 p-4">
           <GhostButton onClick={onBack}>back</GhostButton>
-          <GhostButton onClick={onReady} title="Songs someone else already added still work without ai">
-            skip for now
-          </GhostButton>
+          {waiting && <GhostButton onClick={checkAgain}>i've connected</GhostButton>}
+          {!waiting && (
+            <GhostButton onClick={onReady} title="Songs someone else already added still work without ai">
+              skip for now
+            </GhostButton>
+          )}
           <PrimaryButton onClick={connect} disabled={!agreed || connecting}>
-            {connecting ? 'opening openrouter...' : 'agree · connect openrouter'}
+            {connecting ? 'opening openrouter...' : waiting ? 'connect again' : 'agree · connect openrouter'}
           </PrimaryButton>
         </div>
       </Panel>
@@ -292,7 +329,7 @@ function FormingStep({ onBack }: { onBack: () => void }) {
   const started = useRef(false)
 
   const run = useCallback(async () => {
-    const input = sessionStorage.getItem(PENDING_IMPORT_KEY)
+    const input = getTemp(PENDING_IMPORT_KEY)
     if (!input) {
       onBack()
       return
@@ -348,7 +385,7 @@ function FormingStep({ onBack }: { onBack: () => void }) {
         }
       }
       // Keep the songs if the AI wasn't available, so connecting it and coming back retries them
-      if (!data.aiError) sessionStorage.removeItem(PENDING_IMPORT_KEY)
+      if (!data.aiError) removeTemp(PENDING_IMPORT_KEY)
       setPhase('done')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not add your songs')
@@ -364,6 +401,10 @@ function FormingStep({ onBack }: { onBack: () => void }) {
     started.current = true
     run()
   }, [run])
+
+  const needsAiNow = phase === 'done' && summary?.aiError === 'ai_not_connected'
+  // Connected OpenRouter in the other tab: add the songs that needed the AI
+  useEffect(() => (needsAiNow ? listenForAiConnected(() => run()) : undefined), [needsAiNow, run])
 
   const done = phase === 'done'
   const pct = done ? 100 : Math.min(95, Math.round((added / expected) * 100))

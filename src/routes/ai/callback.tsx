@@ -1,13 +1,15 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { completeOpenRouterConnect } from '../../lib/openrouter-connect'
 
 export const Route = createFileRoute('/ai/callback')({ component: OpenRouterCallback })
 
-// OpenRouter redirects here after the user approves (or cancels) the connection
+type State = { kind: 'working' } | { kind: 'handed_off' } | { kind: 'error'; message: string }
+
+// OpenRouter sends people here after they approve (or cancel) the connection, usually in the tab
+// that Crosstalk opened for it
 function OpenRouterCallback() {
-  const navigate = useNavigate()
-  const [error, setError] = useState<string | null>(null)
+  const [state, setState] = useState<State>({ kind: 'working' })
   const started = useRef(false)
 
   useEffect(() => {
@@ -18,31 +20,40 @@ function OpenRouterCallback() {
     const params = new URLSearchParams(window.location.search)
     const code = params.get('code')
     if (!code) {
-      setError('OpenRouter did not connect. You can try again from the sidebar.')
+      setState({ kind: 'error', message: 'OpenRouter did not connect. Go back to Crosstalk and try again.' })
       return
     }
 
     completeOpenRouterConnect(code, params.get('state'))
-      // returnTo is a same-site path that may carry a query (e.g. /start?step=forming)
-      .then((returnTo) => window.location.replace(returnTo))
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not connect OpenRouter.'))
-  }, [navigate])
+      .then(({ handedOff, returnTo }) => {
+        if (handedOff) {
+          // The Crosstalk tab that started this continues on its own
+          setState({ kind: 'handed_off' })
+          window.close()
+        } else {
+          // returnTo is a same-site path that may carry a query (e.g. /start?step=forming)
+          window.location.replace(returnTo)
+        }
+      })
+      .catch((err: unknown) =>
+        setState({ kind: 'error', message: err instanceof Error ? err.message : 'Could not connect OpenRouter.' }),
+      )
+  }, [])
 
   return (
     <div className="min-h-screen bg-black text-white flex items-center justify-center p-6 font-mono">
       <div className="max-w-sm w-full border border-white/30 p-6 text-sm">
-        {error ? (
+        {state.kind === 'working' && <p>Connecting OpenRouter...</p>}
+        {state.kind === 'handed_off' && (
+          <p>OpenRouter is connected. You can close this tab and go back to Crosstalk.</p>
+        )}
+        {state.kind === 'error' && (
           <>
-            <p className="mb-4">{error}</p>
-            <button
-              onClick={() => navigate({ to: '/app', replace: true })}
-              className="px-3 py-2 bg-white text-black hover:bg-gray-200 font-semibold"
-            >
+            <p className="mb-4">{state.message}</p>
+            <a href="/app" className="inline-block px-3 py-2 bg-white text-black hover:bg-gray-200 hover:text-black font-semibold">
               Back to Crosstalk
-            </button>
+            </a>
           </>
-        ) : (
-          <p>Connecting OpenRouter...</p>
         )}
       </div>
     </div>
