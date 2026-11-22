@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react'
+import { useEffect, useRef, useCallback, useMemo, useImperativeHandle, forwardRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
@@ -140,6 +140,8 @@ export interface NucleusVisualizationHandle {
 export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, NucleusVisualizationProps>(function NucleusVisualization({ tracks, onOrbitClick, onTrackClick, onNucleusClick, isAudioPlaying, audioEnergy, audioTempo }, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  // Set when the browser can't create a WebGL context (hardware acceleration off, too many contexts...)
+  const [webglUnavailable, setWebglUnavailable] = useState(false)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const controlsRef = useRef<OrbitControls | null>(null)
@@ -1008,10 +1010,15 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
 
   // Initialize scene only once
   useEffect(() => {
-    if (!canvasRef.current || !containerRef.current) return
+    if (!containerRef.current) return
 
-    const canvas = canvasRef.current
     const container = containerRef.current
+    // A fresh canvas per mount: a canvas whose WebGL context was lost (or released on unmount)
+    // can't get a new one, so reusing React's canvas made remounts fail with "Error creating WebGL context"
+    const canvas = document.createElement('canvas')
+    canvas.className = 'nucleus-canvas'
+    container.prepend(canvas)
+    canvasRef.current = canvas
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x000000)
     sceneRef.current = scene
@@ -1038,7 +1045,19 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
     controlsRef.current = controls
 
     // Renderer
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
+    let renderer: THREE.WebGLRenderer
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
+    } catch (error) {
+      console.error('Could not start WebGL for the nucleus:', error)
+      controls.dispose()
+      canvas.remove()
+      canvasRef.current = null
+      sceneRef.current = null
+      cameraRef.current = null
+      setWebglUnavailable(true)
+      return
+    }
     renderer.setSize(sizes.width, sizes.height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     rendererRef.current = renderer
@@ -1371,9 +1390,14 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
       })
       orbitGroupsRef.current = []
 
-      renderer.dispose()
       composer.dispose()
       controls.dispose()
+      renderer.dispose()
+      // Release the WebGL context now instead of waiting for garbage collection; browsers only allow
+      // a few at once, and every page with a nucleus (landing, example, onboarding, app) creates one
+      renderer.forceContextLoss()
+      canvas.remove()
+      canvasRef.current = null
 
       sceneRef.current = null
       cameraRef.current = null
@@ -1435,7 +1459,15 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
 
   return (
     <div ref={containerRef} className="w-full h-full">
-      <canvas ref={canvasRef} className="nucleus-canvas" />
+      {/* The canvas is created by the scene effect (one per mount) */}
+      {webglUnavailable && (
+        <div className="flex h-full w-full items-center justify-center p-6 text-center font-mono text-xs leading-relaxed text-white/60">
+          <p className="max-w-sm">
+            your browser couldn't start 3d graphics (webgl), so the nucleus can't be drawn. turn on hardware acceleration in
+            your browser settings, close other tabs with 3d content, or reload the page.
+          </p>
+        </div>
+      )}
       {/* Hidden color extractors for each track */}
       {tracks.map(track => track.cover_url && (
         <TrackColorsExtractor
