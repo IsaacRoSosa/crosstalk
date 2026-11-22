@@ -59,11 +59,27 @@ export function PanelHeader({ title, step }: { title: string; step?: string }) {
   )
 }
 
+// The Crosstalk mark: a planet with a tilted ring and a moon. Drawn in the current text color, with
+// the gap in front of the planet cut in `background` (black on the app's pages).
+export function PlanetMark({ size = 20, background = '#000000' }: { size?: number; background?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 200 200" aria-hidden="true" className="shrink-0">
+      <g transform="rotate(-18 100 100)">
+        <path d="M 16 100 A 84 30 0 0 1 184 100" fill="none" stroke="currentColor" strokeWidth="14" opacity="0.55" />
+        <circle cx="100" cy="100" r="46" fill="currentColor" />
+        <path d="M 16 100 A 84 30 0 0 0 184 100" fill="none" stroke={background} strokeWidth="30" />
+        <path d="M 16 100 A 84 30 0 0 0 184 100" fill="none" stroke="currentColor" strokeWidth="14" />
+        <circle cx="168" cy="121" r="15" fill="currentColor" />
+      </g>
+    </svg>
+  )
+}
+
 // The crosstalk wordmark, linking home
 export function Wordmark() {
   return (
     <a href="/" className="flex items-center gap-2.5 text-white hover:text-white">
-      <PulseDot size={8} />
+      <PlanetMark size={22} />
       <span className="text-[13px] font-bold uppercase tracking-[0.2em]">crosstalk</span>
     </a>
   )
