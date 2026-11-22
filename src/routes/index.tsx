@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { NucleusVisualization } from '../components/NucleusVisualization'
 import { ghostButtonClass, primaryButtonClass, PulseDot, Wordmark } from '../components/ui'
 import { EXAMPLE_TRACKS } from '../data/example-nucleus'
+import { signInToExistingGoogleAccount } from '../lib/auth'
 import { getSupabaseBrowserClient } from '../lib/supabase/client'
 import '../styles/galaxy.css'
 
@@ -12,6 +13,10 @@ export const Route = createFileRoute('/')({ component: Landing })
 // anonymous users): the session starts when someone begins their nucleus.
 function Landing() {
   const [returning, setReturning] = useState(false)
+  // Signed in with Google (not a guest): no "log in" button then
+  const [hasAccount, setHasAccount] = useState(false)
+  const [loggingIn, setLoggingIn] = useState(false)
+  const [loginError, setLoginError] = useState<string | null>(null)
   // Set by the profile page after deleting an account
   const [deleted, setDeleted] = useState(false)
 
@@ -22,9 +27,22 @@ function Landing() {
     }
     getSupabaseBrowserClient()
       .auth.getSession()
-      .then(({ data }) => setReturning(Boolean(data.session)))
+      .then(({ data }) => {
+        setReturning(Boolean(data.session))
+        setHasAccount(Boolean(data.session && !data.session.user.is_anonymous))
+      })
       .catch(() => setReturning(false))
   }, [])
+
+  const logIn = () => {
+    setLoggingIn(true)
+    setLoginError(null)
+    // Leaves for Google on success, so only failures come back here
+    signInToExistingGoogleAccount().catch(() => {
+      setLoggingIn(false)
+      setLoginError('could not open google sign-in. try again.')
+    })
+  }
 
   return (
     <div className="relative h-screen min-h-[560px] overflow-hidden bg-black text-white">
@@ -46,11 +64,23 @@ function Landing() {
 
       <header className="absolute left-6 right-6 top-6 flex items-center justify-between gap-4 md:left-[72px]">
         <Wordmark />
-        {deleted && (
-          <p className="ct-fade-up border border-white/30 bg-black/80 px-3 py-2 text-[11px] text-white/80">
-            your account and everything in it was deleted.
-          </p>
-        )}
+        <div className="flex items-center gap-3">
+          {deleted && (
+            <p className="ct-fade-up hidden border border-white/30 bg-black/80 px-3 py-2 text-[11px] text-white/80 sm:block">
+              your account and everything in it was deleted.
+            </p>
+          )}
+          {!hasAccount && (
+            <button
+              onClick={logIn}
+              disabled={loggingIn}
+              title="Log in with the Google account you saved your nuclei with"
+              className="border border-white/30 bg-black/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/70 transition-colors hover:border-white hover:text-white disabled:text-white/30"
+            >
+              {loggingIn ? 'opening google...' : 'log in'}
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="pointer-events-none relative flex h-full max-w-[760px] flex-col justify-center px-6 md:px-[72px]">
@@ -86,6 +116,18 @@ function Landing() {
             see an example nucleus
           </Link>
         </div>
+        {!hasAccount && (
+          <p className="pointer-events-auto mt-5 text-[11px] text-white/45">
+            {loginError ?? (
+              <>
+                already saved your nucleus?{' '}
+                <button onClick={logIn} disabled={loggingIn} className="text-white/70 underline hover:text-white">
+                  log in with google
+                </button>
+              </>
+            )}
+          </p>
+        )}
       </main>
 
       <footer className="absolute bottom-10 left-6 flex flex-wrap gap-x-8 gap-y-2 text-[9px] uppercase tracking-[0.12em] text-white/30 md:left-[72px]">
