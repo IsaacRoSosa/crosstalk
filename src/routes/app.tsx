@@ -93,22 +93,27 @@ function App() {
 
   // Load YouTube IFrame API
   useEffect(() => {
-    if (document.getElementById('yt-iframe-api')) {
-      if (window.YT && window.YT.Player) {
-        ytApiReady.current = true
-      }
-      return
-    }
-
-    const tag = document.createElement('script')
-    tag.id = 'yt-iframe-api'
-    tag.src = 'https://www.youtube.com/iframe_api'
-    document.head.appendChild(tag)
-
-    window.onYouTubeIframeAPIReady = () => {
+    const markReady = () => {
       ytApiReady.current = true
       ytApiCallbacks.current.forEach(cb => cb())
       ytApiCallbacks.current = []
+    }
+
+    if (window.YT && window.YT.Player) {
+      markReady()
+      return
+    }
+
+    // Set the callback even if the script tag already exists (e.g. after navigating away and back
+    // before it finished loading); otherwise queued plays would never start
+    window.onYouTubeIframeAPIReady = markReady
+
+    if (!document.getElementById('yt-iframe-api')) {
+      const tag = document.createElement('script')
+      tag.id = 'yt-iframe-api'
+      tag.src = 'https://www.youtube.com/iframe_api'
+      tag.onerror = () => console.error('Could not load the YouTube player (blocked by the browser or an extension?)')
+      document.head.appendChild(tag)
     }
   }, [])
 
@@ -125,7 +130,7 @@ function App() {
       return result.videoId || null
     } catch (err) {
       console.error('YouTube search failed:', err)
-      return null
+      throw err
     }
   }, [])
 
@@ -199,7 +204,14 @@ function App() {
   const playTrack = useCallback(async (track: Track) => {
     setIsLoadingVideo(true)
 
-    const videoId = await searchYouTubeVideo(track)
+    let videoId: string | null
+    try {
+      videoId = await searchYouTubeVideo(track)
+    } catch (err) {
+      setIsLoadingVideo(false)
+      setError(err instanceof Error ? err.message : 'Could not play this track')
+      return
+    }
     if (!videoId) {
       setIsLoadingVideo(false)
       setError('Could not find this track on YouTube')
