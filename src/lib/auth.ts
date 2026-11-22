@@ -46,8 +46,9 @@ export async function saveWithGoogle(): Promise<void> {
   if (error) throw error
 }
 
-// For when Google is already linked to another Crosstalk account: sign in to that account and
-// bring this anonymous session's songs along
+// Log in with Google (the landing's "log in", the "already linked" screen). From a guest session,
+// the guest's songs come along into the Google account; with no session, it's a plain sign-in and
+// no guest is created first.
 export async function signInToExistingGoogleAccount(): Promise<void> {
   const supabase = getSupabaseBrowserClient()
   const { data } = await supabase.auth.getSession()
