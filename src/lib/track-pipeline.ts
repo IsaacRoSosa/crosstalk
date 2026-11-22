@@ -18,6 +18,7 @@ import {
   toTrack,
 } from './repository'
 import { getAdminClient } from './supabase/server'
+import { log } from './log'
 import type { UserContext } from './session'
 import type { TrackRow } from './supabase/database.types'
 import { isEmotion, type SpotifyMetadata, type Track } from '../types/track'
@@ -78,9 +79,15 @@ async function linkToNucleus(ctx: UserContext, row: TrackRow): Promise<AddTrackR
 }
 
 async function analyzeCandidate(candidate: TrackCandidate, existingId?: number): Promise<TrackRow> {
+  const label = `${candidate.title} - ${candidate.artist}`
+  log.info('pipeline', 'analyzing new track', { track: label, spotifyId: candidate.spotify_id, deezerId: candidate.deezer_id })
+
   const lyricsResult = await searchGeniusLyrics(candidate.title, candidate.artist, requireEnv('GENIUS_ACCESS_TOKEN'))
   if (!lyricsResult.lyrics) {
-    throw new HttpError(422, 'No lyrics found for this track. Unable to analyze emotion.')
+    log.warn('pipeline', 'skipping track without lyrics', { track: label, reason: lyricsResult.reason })
+    throw new HttpError(422, 'No lyrics found for this track. Unable to analyze emotion.', {
+      reason: lyricsResult.reason,
+    })
   }
 
   const geminiApiKeys = getGeminiApiKeys()
@@ -91,8 +98,10 @@ async function analyzeCandidate(candidate: TrackCandidate, existingId?: number):
   const analysis = await analyzeLyricsWithRotation(lyricsResult.lyrics, candidate.title, candidate.artist, geminiApiKeys)
   const emotion = typeof analysis.emotion === 'string' ? analysis.emotion.toLowerCase().trim() : analysis.emotion
   if (!isEmotion(emotion)) {
+    log.warn('pipeline', 'AI returned an invalid emotion', { track: label, emotion: analysis.emotion })
     throw new HttpError(502, 'The AI returned an unexpected analysis. Please try again.')
   }
+  log.info('pipeline', 'track analyzed', { track: label, emotion })
 
   return saveCatalogTrack(
     getAdminClient(),
@@ -115,6 +124,7 @@ async function analyzeCandidate(candidate: TrackCandidate, existingId?: number):
 // Reuses the catalog when possible (same source id, or same ISRC from the other source); analyses otherwise.
 async function addCandidate(ctx: UserContext, candidate: TrackCandidate, sameSourceRow: TrackRow | null): Promise<AddTrackResult> {
   if (sameSourceRow?.analyzed_at) {
+    log.info('pipeline', 'reusing analyzed track', { trackId: sameSourceRow.id, match: 'source id' })
     return linkToNucleus(ctx, sameSourceRow)
   }
 
@@ -128,6 +138,7 @@ async function addCandidate(ctx: UserContext, candidate: TrackCandidate, sameSou
       if (Object.keys(missingIds).length > 0) {
         await linkTrackSource(getAdminClient(), sameRecording.id, missingIds)
       }
+      log.info('pipeline', 'reusing analyzed track', { trackId: sameRecording.id, match: 'isrc' })
       return linkToNucleus(ctx, sameRecording)
     }
   }

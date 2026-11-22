@@ -4,6 +4,7 @@ import { requireUser } from '../../../lib/session'
 import { isEmptyImport, parseImportInput } from '../../../lib/import-input'
 import { fetchDeezerPlaylistTracks, resolveDeezerShortLink, type DeezerTrack } from '../../../lib/deezer'
 import { addDeezerTrack, addSpotifyTrack, type AddTrackResult } from '../../../lib/track-pipeline'
+import { log } from '../../../lib/log'
 import type { Track } from '../../../types/track'
 
 // Stop after adding this many tracks in one import
@@ -72,9 +73,16 @@ export const Route = createFileRoute('/api/tracks/import')({
             }
           }
 
+          log.info('import', 'starting import', {
+            spotifyTracks: parsed.spotifyTrackIds.length,
+            deezerTracks: parsed.deezerTrackIds.length,
+            deezerPlaylists: parsed.deezerPlaylistIds.length,
+            jobs: jobs.length,
+          })
+
           const success: Track[] = []
           const skipped: Array<{ track: string; artist: string; reason: string }> = []
-          const failed: Array<{ track: string; artist: string; reason: string }> = []
+          const failed: Array<{ track: string; artist: string; reason: string; debug?: Record<string, unknown> }> = []
 
           // Sequential on purpose: keeps us well inside Genius, Gemini and Deezer rate limits,
           // and lets the client show tracks appearing one by one while it polls.
@@ -93,9 +101,17 @@ export const Route = createFileRoute('/api/tracks/import')({
                 track: job.label,
                 artist: '',
                 reason: error instanceof HttpError ? error.message : 'Could not analyze this track',
+                ...(process.env.NODE_ENV !== 'production' && error instanceof HttpError && error.body ? { debug: error.body } : {}),
               })
             }
           }
+
+          log.info('import', 'import finished', {
+            added: success.length,
+            skipped: skipped.length,
+            failed: failed.length,
+            failureReasons: failed.map((f) => f.debug?.reason ?? f.reason),
+          })
 
           return json({
             totalProcessed: success.length + skipped.length + failed.length,
