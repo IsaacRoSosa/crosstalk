@@ -5,6 +5,7 @@ import { NucleusVisualization } from '../components/NucleusVisualization'
 import type { NucleusVisualizationHandle } from '../components/NucleusVisualization'
 import { NucleusChat } from '../components/NucleusChat'
 import { AiConnectionPanel } from '../components/AiConnectionPanel'
+import { AccountPanel } from '../components/AccountPanel'
 import type { Track } from '../types/track'
 import { apiFetch } from '../lib/api-client'
 import { isEmptyImport, parseImportInput } from '../lib/import-input'
@@ -646,6 +647,7 @@ function App() {
       {/* Sidebar */}
       <div className={`fixed top-0 w-80 h-screen bg-black border-l border-white/20 overflow-y-auto z-40 transition-[right] duration-300 ${sidebarCollapsed ? '-right-80' : 'right-0'}`}>
         <div className="pb-4 px-4 pt-4">
+          <AccountPanel />
           <AiConnectionPanel refreshToken={aiPanelRefresh} highlight={aiPanelRefresh > 0} />
 
           {/* Add Track Input */}

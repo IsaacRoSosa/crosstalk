@@ -11,13 +11,15 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AiCallbackRouteImport } from './routes/ai/callback'
-import { Route as ApiTracksIndexRouteImport } from './routes/api/tracks/index'
-import { Route as ApiChatIndexRouteImport } from './routes/api/chat/index'
-import { Route as ApiTracksVideoRouteImport } from './routes/api/tracks/video'
-import { Route as ApiTracksImportRouteImport } from './routes/api/tracks/import'
-import { Route as ApiNucleusRenameRouteImport } from './routes/api/nucleus/rename'
-import { Route as ApiChatMessageRouteImport } from './routes/api/chat/message'
+import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
+import { Route as ApiAccountMergeRouteImport } from './routes/api/account/merge'
 import { Route as ApiAiConnectionRouteImport } from './routes/api/ai/connection'
+import { Route as ApiChatIndexRouteImport } from './routes/api/chat/index'
+import { Route as ApiChatMessageRouteImport } from './routes/api/chat/message'
+import { Route as ApiNucleusRenameRouteImport } from './routes/api/nucleus/rename'
+import { Route as ApiTracksIndexRouteImport } from './routes/api/tracks/index'
+import { Route as ApiTracksImportRouteImport } from './routes/api/tracks/import'
+import { Route as ApiTracksVideoRouteImport } from './routes/api/tracks/video'
 import { Route as ApiAiOpenrouterExchangeRouteImport } from './routes/api/ai/openrouter/exchange'
 
 const IndexRoute = IndexRouteImport.update({
@@ -30,9 +32,19 @@ const AiCallbackRoute = AiCallbackRouteImport.update({
   path: '/ai/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTracksIndexRoute = ApiTracksIndexRouteImport.update({
-  id: '/api/tracks/',
-  path: '/api/tracks/',
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAccountMergeRoute = ApiAccountMergeRouteImport.update({
+  id: '/api/account/merge',
+  path: '/api/account/merge',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAiConnectionRoute = ApiAiConnectionRouteImport.update({
+  id: '/api/ai/connection',
+  path: '/api/ai/connection',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiChatIndexRoute = ApiChatIndexRouteImport.update({
@@ -40,14 +52,9 @@ const ApiChatIndexRoute = ApiChatIndexRouteImport.update({
   path: '/api/chat/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTracksVideoRoute = ApiTracksVideoRouteImport.update({
-  id: '/api/tracks/video',
-  path: '/api/tracks/video',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiTracksImportRoute = ApiTracksImportRouteImport.update({
-  id: '/api/tracks/import',
-  path: '/api/tracks/import',
+const ApiChatMessageRoute = ApiChatMessageRouteImport.update({
+  id: '/api/chat/message',
+  path: '/api/chat/message',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiNucleusRenameRoute = ApiNucleusRenameRouteImport.update({
@@ -55,14 +62,19 @@ const ApiNucleusRenameRoute = ApiNucleusRenameRouteImport.update({
   path: '/api/nucleus/rename',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiChatMessageRoute = ApiChatMessageRouteImport.update({
-  id: '/api/chat/message',
-  path: '/api/chat/message',
+const ApiTracksIndexRoute = ApiTracksIndexRouteImport.update({
+  id: '/api/tracks/',
+  path: '/api/tracks/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAiConnectionRoute = ApiAiConnectionRouteImport.update({
-  id: '/api/ai/connection',
-  path: '/api/ai/connection',
+const ApiTracksImportRoute = ApiTracksImportRouteImport.update({
+  id: '/api/tracks/import',
+  path: '/api/tracks/import',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTracksVideoRoute = ApiTracksVideoRouteImport.update({
+  id: '/api/tracks/video',
+  path: '/api/tracks/video',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAiOpenrouterExchangeRoute = ApiAiOpenrouterExchangeRouteImport.update({
@@ -74,6 +86,8 @@ const ApiAiOpenrouterExchangeRoute = ApiAiOpenrouterExchangeRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/ai/callback': typeof AiCallbackRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/api/account/merge': typeof ApiAccountMergeRoute
   '/api/ai/connection': typeof ApiAiConnectionRoute
   '/api/chat/message': typeof ApiChatMessageRoute
   '/api/nucleus/rename': typeof ApiNucleusRenameRoute
@@ -86,6 +100,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/ai/callback': typeof AiCallbackRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/api/account/merge': typeof ApiAccountMergeRoute
   '/api/ai/connection': typeof ApiAiConnectionRoute
   '/api/chat/message': typeof ApiChatMessageRoute
   '/api/nucleus/rename': typeof ApiNucleusRenameRoute
@@ -99,6 +115,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/ai/callback': typeof AiCallbackRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/api/account/merge': typeof ApiAccountMergeRoute
   '/api/ai/connection': typeof ApiAiConnectionRoute
   '/api/chat/message': typeof ApiChatMessageRoute
   '/api/nucleus/rename': typeof ApiNucleusRenameRoute
@@ -113,6 +131,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/ai/callback'
+    | '/auth/callback'
+    | '/api/account/merge'
     | '/api/ai/connection'
     | '/api/chat/message'
     | '/api/nucleus/rename'
@@ -125,6 +145,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/ai/callback'
+    | '/auth/callback'
+    | '/api/account/merge'
     | '/api/ai/connection'
     | '/api/chat/message'
     | '/api/nucleus/rename'
@@ -137,6 +159,8 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/ai/callback'
+    | '/auth/callback'
+    | '/api/account/merge'
     | '/api/ai/connection'
     | '/api/chat/message'
     | '/api/nucleus/rename'
@@ -150,6 +174,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AiCallbackRoute: typeof AiCallbackRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
+  ApiAccountMergeRoute: typeof ApiAccountMergeRoute
   ApiAiConnectionRoute: typeof ApiAiConnectionRoute
   ApiChatMessageRoute: typeof ApiChatMessageRoute
   ApiNucleusRenameRoute: typeof ApiNucleusRenameRoute
@@ -176,11 +202,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AiCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/tracks/': {
-      id: '/api/tracks/'
-      path: '/api/tracks'
-      fullPath: '/api/tracks/'
-      preLoaderRoute: typeof ApiTracksIndexRouteImport
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/account/merge': {
+      id: '/api/account/merge'
+      path: '/api/account/merge'
+      fullPath: '/api/account/merge'
+      preLoaderRoute: typeof ApiAccountMergeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ai/connection': {
+      id: '/api/ai/connection'
+      path: '/api/ai/connection'
+      fullPath: '/api/ai/connection'
+      preLoaderRoute: typeof ApiAiConnectionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat/': {
@@ -190,18 +230,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/tracks/video': {
-      id: '/api/tracks/video'
-      path: '/api/tracks/video'
-      fullPath: '/api/tracks/video'
-      preLoaderRoute: typeof ApiTracksVideoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/tracks/import': {
-      id: '/api/tracks/import'
-      path: '/api/tracks/import'
-      fullPath: '/api/tracks/import'
-      preLoaderRoute: typeof ApiTracksImportRouteImport
+    '/api/chat/message': {
+      id: '/api/chat/message'
+      path: '/api/chat/message'
+      fullPath: '/api/chat/message'
+      preLoaderRoute: typeof ApiChatMessageRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/nucleus/rename': {
@@ -211,18 +244,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiNucleusRenameRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/chat/message': {
-      id: '/api/chat/message'
-      path: '/api/chat/message'
-      fullPath: '/api/chat/message'
-      preLoaderRoute: typeof ApiChatMessageRouteImport
+    '/api/tracks/': {
+      id: '/api/tracks/'
+      path: '/api/tracks'
+      fullPath: '/api/tracks/'
+      preLoaderRoute: typeof ApiTracksIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/ai/connection': {
-      id: '/api/ai/connection'
-      path: '/api/ai/connection'
-      fullPath: '/api/ai/connection'
-      preLoaderRoute: typeof ApiAiConnectionRouteImport
+    '/api/tracks/import': {
+      id: '/api/tracks/import'
+      path: '/api/tracks/import'
+      fullPath: '/api/tracks/import'
+      preLoaderRoute: typeof ApiTracksImportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/tracks/video': {
+      id: '/api/tracks/video'
+      path: '/api/tracks/video'
+      fullPath: '/api/tracks/video'
+      preLoaderRoute: typeof ApiTracksVideoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/ai/openrouter/exchange': {
@@ -238,6 +278,8 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AiCallbackRoute: AiCallbackRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
+  ApiAccountMergeRoute: ApiAccountMergeRoute,
   ApiAiConnectionRoute: ApiAiConnectionRoute,
   ApiChatMessageRoute: ApiChatMessageRoute,
   ApiNucleusRenameRoute: ApiNucleusRenameRoute,
