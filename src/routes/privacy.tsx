@@ -87,7 +87,14 @@ function Privacy() {
           <p>Crosstalk runs on a few outside services. Each one gets only what it needs:</p>
           <ul className="space-y-3">
             <Item name="supabase">Our database and sign-in. Everything listed above lives there.</Item>
-            <Item name="vercel">Hosts the app. Like any web host, it keeps short-lived request logs.</Item>
+            <Item name="vercel">
+              Hosts the app. Like any web host, it keeps short-lived request logs. It also counts page views for us (which
+              pages are visited, browser, country), without cookies and without knowing who you are.
+            </Item>
+            <Item name="cloudflare">
+              Runs a quick check that you're a person (Turnstile) before a guest session starts. It sees your browser and IP address, not your
+              songs.
+            </Item>
             <Item name="google">Only when you choose to save with Google, to sign you in.</Item>
             <Item name="openrouter">
               Receives a song's title, artist and lyrics to read it, a summary of your nucleus for its first impression, and

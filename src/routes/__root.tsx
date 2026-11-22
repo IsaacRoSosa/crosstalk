@@ -1,6 +1,7 @@
 import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
+import { Analytics, type BeforeSendEvent } from '@vercel/analytics/react'
 
 import appCss from '../styles.css?url'
 
@@ -50,6 +51,15 @@ export const Route = createRootRoute({
   shellComponent: RootDocument,
 })
 
+// Page views go to Vercel Web Analytics (no cookies). Ids in the path (a nucleus, later a share
+// link) are folded into one route so the dashboard groups pages instead of listing every nucleus.
+function anonymizePageView(event: BeforeSendEvent): BeforeSendEvent {
+  const url = new URL(event.url)
+  url.pathname = url.pathname.replace(/\/n\/[^/]+/, '/n/[id]')
+  url.search = ''
+  return { ...event, url: url.toString() }
+}
+
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -69,6 +79,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             },
           ]}
         /> */}
+        <Analytics beforeSend={anonymizePageView} />
         <Scripts />
       </body>
     </html>
