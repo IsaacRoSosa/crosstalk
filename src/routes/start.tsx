@@ -4,6 +4,7 @@ import { NucleusVisualization } from '../components/NucleusVisualization'
 import { Eyebrow, GhostButton, Panel, PanelHeader, PrimaryButton, ghostButtonClass, primaryButtonClass, Wordmark } from '../components/ui'
 import { apiFetch } from '../lib/api-client'
 import { isEmptyImport, parseImportInput, type ParsedImportInput } from '../lib/import-input'
+import { importSongs, type ImportResult } from '../lib/import-client'
 import { listenForAiConnected, startOpenRouterConnect } from '../lib/openrouter-connect'
 import { getTemp, removeTemp, setTemp } from '../lib/temp-storage'
 import type { Track } from '../types/track'
@@ -308,13 +309,7 @@ function Never({ children }: { children: ReactNode }) {
 
 // ── Step 3: forming ─────────────────────────────────────────────────────────
 
-interface ImportSummary {
-  successCount: number
-  skippedCount: number
-  failedCount: number
-  notice?: string
-  aiError?: string
-}
+type ImportSummary = Pick<ImportResult, 'successCount' | 'skippedCount' | 'failedCount' | 'notice' | 'aiError'>
 
 type Phase = 'importing' | 'naming' | 'done' | 'failed'
 
@@ -364,9 +359,7 @@ function FormingStep({ onBack }: { onBack: () => void }) {
     }, 2000)
 
     try {
-      const res = await apiFetch('/api/tracks/import', { method: 'POST', body: JSON.stringify({ input }) })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Could not add your songs')
+      const data = await importSongs(input)
       setSummary(data)
       setAdded(data.successCount)
 

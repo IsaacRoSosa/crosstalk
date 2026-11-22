@@ -9,6 +9,7 @@ import { AccountPanel } from '../components/AccountPanel'
 import type { Track } from '../types/track'
 import { apiFetch } from '../lib/api-client'
 import { isEmptyImport, parseImportInput } from '../lib/import-input'
+import { importSongs } from '../lib/import-client'
 import '../styles/galaxy.css'
 
 // YouTube IFrame API types
@@ -487,14 +488,7 @@ function App() {
     }
 
     try {
-      const response = await apiFetch('/api/tracks/import', {
-        method: 'POST',
-        body: JSON.stringify({ input }),
-      })
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to add tracks')
-      }
+      const data = await importSongs(input)
 
       await loadTracks()
       setImportInput('')

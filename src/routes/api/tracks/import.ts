@@ -12,17 +12,31 @@ const TARGET_SUCCESS = 25
 // Upper bound on songs looked at per import (some fail, e.g. instrumentals without lyrics)
 const MAX_ATTEMPTS = 40
 const MAX_INPUT_LENGTH = 50_000
+// Serverless functions get cut off (Vercel Hobby: 300 s). Stop starting new songs after this long
+// and hand the rest back to the client, which sends them in the next request. One song can take
+// ~2 minutes in the worst case (slow free model + a retry), so this leaves room for it to finish.
+const TIME_BUDGET_MS = Number(process.env.IMPORT_TIME_BUDGET_MS) || 150_000
 
 const SPOTIFY_PLAYLIST_HELP =
   "Spotify doesn't let apps read playlists anymore. Open the playlist in the Spotify desktop app, select the songs (Cmd/Ctrl+A), copy them (Cmd/Ctrl+C) and paste them here. Deezer playlist links also work."
 
 interface ImportJob {
   label: string
+  // A link that imports this same song, used to hand unfinished songs back to the client
+  link: string
   run: () => Promise<AddTrackResult>
+}
+
+function clampCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
 }
 
 // Adds the songs in whatever the user pasted: Spotify track links (one or many),
 // Deezer track or playlist links. Spotify playlists can't be read anymore (see SPOTIFY_PLAYLIST_HELP).
+//
+// Resumable: if the time budget runs out, the response carries `remaining` (links for the songs not
+// tried yet). The client posts it back as `input` with the running totals in `alreadyAdded` and
+// `alreadyAttempted`, so the 25-song / 40-attempt limits apply to the whole import, not each request.
 export const Route = createFileRoute('/api/tracks/import')({
   server: {
     handlers: {
@@ -31,6 +45,9 @@ export const Route = createFileRoute('/api/tracks/import')({
           const ctx = await requireUser(request)
           const body = await request.json()
           const input = typeof body.input === 'string' ? body.input.slice(0, MAX_INPUT_LENGTH) : ''
+          const targetSuccess = Math.max(0, TARGET_SUCCESS - clampCount(body.alreadyAdded))
+          const maxAttempts = Math.max(0, MAX_ATTEMPTS - clampCount(body.alreadyAttempted))
+          const startedAt = Date.now()
 
           const parsed = parseImportInput(input)
 
@@ -55,21 +72,25 @@ export const Route = createFileRoute('/api/tracks/import')({
 
           const jobs: ImportJob[] = []
           for (const id of parsed.spotifyTrackIds) {
-            jobs.push({ label: `Spotify track ${id}`, run: () => addSpotifyTrack(ctx, id) })
+            jobs.push({ label: `Spotify track ${id}`, link: `https://open.spotify.com/track/${id}`, run: () => addSpotifyTrack(ctx, id) })
           }
           for (const id of new Set(parsed.deezerTrackIds)) {
-            jobs.push({ label: `Deezer track ${id}`, run: () => addDeezerTrack(ctx, id) })
+            jobs.push({ label: `Deezer track ${id}`, link: `https://www.deezer.com/track/${id}`, run: () => addDeezerTrack(ctx, id) })
           }
           for (const playlistId of new Set(parsed.deezerPlaylistIds)) {
             let playlistTracks: DeezerTrack[]
             try {
-              playlistTracks = await fetchDeezerPlaylistTracks(playlistId, MAX_ATTEMPTS)
+              playlistTracks = await fetchDeezerPlaylistTracks(playlistId, Math.max(1, maxAttempts))
             } catch (error) {
               console.error(`Error fetching Deezer playlist ${playlistId}:`, error)
               throw new HttpError(502, "Couldn't read that Deezer playlist. Make sure it's public.")
             }
             for (const track of playlistTracks) {
-              jobs.push({ label: `${track.title} - ${track.artist?.name ?? ''}`, run: () => addDeezerTrack(ctx, track) })
+              jobs.push({
+                label: `${track.title} - ${track.artist?.name ?? ''}`,
+                link: `https://www.deezer.com/track/${track.id}`,
+                run: () => addDeezerTrack(ctx, track),
+              })
             }
           }
 
@@ -78,6 +99,8 @@ export const Route = createFileRoute('/api/tracks/import')({
             deezerTracks: parsed.deezerTrackIds.length,
             deezerPlaylists: parsed.deezerPlaylistIds.length,
             jobs: jobs.length,
+            targetSuccess,
+            maxAttempts,
           })
 
           // AI problems that would make every remaining new song fail the same way
@@ -90,8 +113,17 @@ export const Route = createFileRoute('/api/tracks/import')({
 
           // Sequential on purpose: keeps us inside LRCLIB, Deezer and OpenRouter's free-model rate limits,
           // and lets the client show tracks appearing one by one while it polls.
-          for (const job of jobs.slice(0, MAX_ATTEMPTS)) {
-            if (success.length >= TARGET_SUCCESS) break
+          const allowed = jobs.slice(0, maxAttempts)
+          let attempted = 0
+          let remaining: ImportJob[] = []
+          for (const [index, job] of allowed.entries()) {
+            if (success.length >= targetSuccess) break
+            // Always try at least one song per request, so every chunk makes progress
+            if (attempted > 0 && Date.now() - startedAt > TIME_BUDGET_MS) {
+              remaining = allowed.slice(index)
+              break
+            }
+            attempted++
             try {
               const result = await job.run()
               if (result.status === 'added') {
@@ -119,8 +151,14 @@ export const Route = createFileRoute('/api/tracks/import')({
             }
           }
 
-          log.info('import', 'import finished', {
+          // If the AI stopped working, the next request would just hit the same error (and spend
+          // another of the user's free daily requests), so don't hand anything back
+          const remainingInput = stopError ? null : remaining.map((job) => job.link).join('\n') || null
+
+          log.info('import', remainingInput ? 'import chunk finished' : 'import finished', {
             added: success.length,
+            remaining: remainingInput ? remaining.length : 0,
+            seconds: Math.round((Date.now() - startedAt) / 1000),
             skipped: skipped.length,
             failed: failed.length,
             failureReasons: failed.map((f) => f.debug?.reason ?? f.reason),
@@ -136,6 +174,8 @@ export const Route = createFileRoute('/api/tracks/import')({
             failed,
             notice: stopError?.message ?? (parsed.spotifyPlaylistIds.length > 0 ? SPOTIFY_PLAYLIST_HELP : undefined),
             aiError: stopError?.body?.code,
+            attempted,
+            remaining: remainingInput,
           })
         } catch (error) {
           return errorResponse(error, 'Error importing tracks')
