@@ -7,7 +7,7 @@ export async function searchYouTubeVideoId(query: string, apiKey: string): Promi
 
   let response: Response
   try {
-    response = await fetch(searchUrl)
+    response = await fetch(searchUrl, { signal: AbortSignal.timeout(12_000) })
   } catch (error) {
     log.error('youtube', 'search request threw', { query, error: String(error) })
     throw new HttpError(502, "Couldn't reach YouTube. Please try again.")

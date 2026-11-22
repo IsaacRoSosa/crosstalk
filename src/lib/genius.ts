@@ -28,6 +28,7 @@ export async function findGeniusSongUrl(title: string, artist: string, accessTok
   try {
     const response = await fetch(`https://api.genius.com/search?q=${encodeURIComponent(query)}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(8_000),
     })
     if (!response.ok) {
       log.warn('genius', 'search request failed', { query, status: response.status })

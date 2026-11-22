@@ -15,6 +15,7 @@ async function getAccessToken(clientId: string, clientSecret: string): Promise<s
       'Authorization': 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64'),
     },
     body: 'grant_type=client_credentials',
+    signal: AbortSignal.timeout(12_000),
   })
 
   if (!response.ok) {
@@ -39,6 +40,7 @@ export async function fetchSpotifyMetadata(
     headers: {
       'Authorization': `Bearer ${token}`,
     },
+    signal: AbortSignal.timeout(12_000),
   })
 
   if (!response.ok) {

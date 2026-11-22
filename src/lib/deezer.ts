@@ -14,7 +14,7 @@ export interface DeezerTrack {
 }
 
 async function deezerGet<T>(path: string): Promise<T> {
-  const response = await fetch(`${DEEZER_API}${path}`)
+  const response = await fetch(`${DEEZER_API}${path}`, { signal: AbortSignal.timeout(12_000) })
   if (!response.ok) {
     throw new Error(`Deezer request failed: ${response.status}`)
   }
@@ -53,7 +53,7 @@ export async function resolveDeezerShortLink(url: string): Promise<string | null
   try {
     const parsed = new URL(url)
     if (parsed.protocol !== 'https:' || !SHORT_LINK_HOSTS.has(parsed.hostname)) return null
-    const response = await fetch(parsed, { redirect: 'follow' })
+    const response = await fetch(parsed, { redirect: 'follow', signal: AbortSignal.timeout(12_000) })
     return response.url || null
   } catch {
     return null

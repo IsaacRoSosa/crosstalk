@@ -51,6 +51,7 @@ function cleanTitle(title: string): string {
 async function lrclibGet(path: string, params: Record<string, string>, retried = false): Promise<Response> {
   const response = await fetch(`${LRCLIB_API}${path}?${new URLSearchParams(params)}`, {
     headers: { 'User-Agent': USER_AGENT },
+    signal: AbortSignal.timeout(12_000),
   })
   if (response.status === 429 && !retried) {
     // Honor Retry-After (with some jitter), as LRCLIB asks; retry once

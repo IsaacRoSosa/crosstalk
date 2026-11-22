@@ -11,6 +11,8 @@ export const FREE_MODEL = 'openrouter/free'
 
 // Free models allow 20 requests per minute; keep each user comfortably under that
 const MIN_INTERVAL_MS = 3500
+// Free models are sometimes slow; give up before a stuck request eats the serverless time limit
+const REQUEST_TIMEOUT_MS = 50_000
 const lastCallByUser = new Map<string, number>()
 
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
@@ -88,15 +90,25 @@ export async function chatCompletion(
 
   await waitForTurn(userId)
 
-  const response = await fetch(`${OPENROUTER_API}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      ...attributionHeaders(),
-    },
-    body: JSON.stringify({ model, messages, temperature: options.temperature ?? 0.7 }),
-  })
+  let response: Response
+  try {
+    response = await fetch(`${OPENROUTER_API}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        ...attributionHeaders(),
+      },
+      body: JSON.stringify({ model, messages, temperature: options.temperature ?? 0.7 }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === 'TimeoutError'
+    log.warn('openrouter', timedOut ? 'request timed out' : 'request threw', { model, error: String(error) })
+    throw new HttpError(timedOut ? 504 : 502, timedOut ? 'The AI took too long to answer. Please try again.' : "Couldn't reach OpenRouter. Please try again.", {
+      code: 'ai_failed',
+    })
+  }
 
   const body = await response.json().catch(() => ({}))
   const errorMessage: string = body?.error?.message ?? ''
