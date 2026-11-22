@@ -285,7 +285,10 @@ function AiStep({ onBack, onReady }: { onBack: () => void; onReady: () => void }
             <a href="https://openrouter.ai/settings/privacy" target="_blank" rel="noopener noreferrer" className="text-white underline">
               openrouter privacy settings
             </a>
-            .
+            .{' '}
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-white/50 underline hover:text-white">
+              how crosstalk uses your data
+            </a>
           </span>
         </label>
 

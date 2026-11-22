@@ -57,6 +57,14 @@ export function AccountPanel() {
           </button>
         </div>
       )}
+      <div className="mt-3 flex gap-3 text-[10px] uppercase tracking-[0.12em] text-white/40">
+        <a href="/profile" className="hover:text-white">
+          profile
+        </a>
+        <a href="/privacy" className="hover:text-white">
+          privacy
+        </a>
+      </div>
       {error && <p className="mt-2 text-white/70">{error}</p>}
     </div>
   )

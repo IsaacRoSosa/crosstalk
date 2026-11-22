@@ -73,6 +73,22 @@ export async function mergePendingAnonymousAccount(): Promise<number> {
   return data.mergedTracks ?? 0
 }
 
+// Deletes the account and everything in it, then leaves this browser signed out
+export async function deleteAccount(): Promise<void> {
+  const response = await apiFetch('/api/account', { method: 'DELETE' })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(data.error || 'Could not delete your account')
+  // The user no longer exists, so only clear the local session
+  await getSupabaseBrowserClient().auth.signOut({ scope: 'local' })
+  try {
+    for (const key of Object.keys(localStorage)) if (key.startsWith('crosstalk.')) localStorage.removeItem(key)
+    sessionStorage.clear()
+  } catch {
+    // storage can be unavailable; the session is already gone
+  }
+  window.location.assign('/?deleted=1')
+}
+
 // After signing out, the next request starts a fresh anonymous session
 export async function signOut(): Promise<void> {
   await getSupabaseBrowserClient().auth.signOut()

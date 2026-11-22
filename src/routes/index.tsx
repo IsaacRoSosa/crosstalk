@@ -12,8 +12,14 @@ export const Route = createFileRoute('/')({ component: Landing })
 // anonymous users): the session starts when someone begins their nucleus.
 function Landing() {
   const [returning, setReturning] = useState(false)
+  // Set by the profile page after deleting an account
+  const [deleted, setDeleted] = useState(false)
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('deleted')) {
+      setDeleted(true)
+      window.history.replaceState(null, '', '/')
+    }
     getSupabaseBrowserClient()
       .auth.getSession()
       .then(({ data }) => setReturning(Boolean(data.session)))
@@ -38,8 +44,13 @@ function Landing() {
       {/* On narrow screens the galaxy sits behind the copy, so dim it more */}
       <div className="pointer-events-none absolute inset-0 bg-black/65 md:hidden" />
 
-      <header className="absolute left-6 top-6 md:left-[72px]">
+      <header className="absolute left-6 right-6 top-6 flex items-center justify-between gap-4 md:left-[72px]">
         <Wordmark />
+        {deleted && (
+          <p className="ct-fade-up border border-white/30 bg-black/80 px-3 py-2 text-[11px] text-white/80">
+            your account and everything in it was deleted.
+          </p>
+        )}
       </header>
 
       <main className="pointer-events-none relative flex h-full max-w-[760px] flex-col justify-center px-6 md:px-[72px]">
@@ -82,6 +93,9 @@ function Landing() {
         <span>lyric analysis</span>
         <span>free ai models</span>
         <span>no feed. no likes.</span>
+        <Link to="/privacy" className="pointer-events-auto text-white/45 underline hover:text-white">
+          privacy: we never sell your data
+        </Link>
       </footer>
     </div>
   )

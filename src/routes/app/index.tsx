@@ -3,7 +3,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import { Lock, Plus } from 'lucide-react'
 import { Eyebrow, PulseDot, Wordmark, primaryButtonClass } from '../../components/ui'
 import { getSupabaseBrowserClient } from '../../lib/supabase/client'
-import { saveWithGoogle, signOut, toAccountInfo, type AccountInfo } from '../../lib/auth'
+import { saveWithGoogle, toAccountInfo, type AccountInfo } from '../../lib/auth'
 import { ApiError, deleteNucleus, listNuclei, renameNucleus, type NucleusLibrary } from '../../lib/nuclei-client'
 import { EMOTIONS, type Emotion } from '../../types/track'
 import { GUEST_RETENTION_DAYS, type NucleusSummary } from '../../types/nucleus'
@@ -403,18 +403,16 @@ function AccountChip() {
   if (!account) return null
   if (account.isAnonymous) {
     return (
-      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] text-white/40">
-        <PulseDot size={5} /> guest
-      </div>
+      <Link to="/profile" className="flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] text-white/40 hover:text-white">
+        <PulseDot size={5} /> guest · profile
+      </Link>
     )
   }
   return (
-    <div className="flex min-w-0 items-center gap-3 text-[11px] text-white/60">
+    <Link to="/profile" className="flex min-w-0 items-center gap-3 text-[11px] text-white/60 hover:text-white" title="Profile">
       {account.avatarUrl && <img src={account.avatarUrl} alt="" className="h-6 w-6 rounded-full" referrerPolicy="no-referrer" />}
       <span className="hidden truncate sm:inline">{account.name ?? account.email}</span>
-      <button onClick={() => signOut()} className="text-white/40 underline hover:text-white">
-        sign out
-      </button>
-    </div>
+      <span className="text-[10px] uppercase tracking-[0.15em] text-white/40">profile</span>
+    </Link>
   )
 }

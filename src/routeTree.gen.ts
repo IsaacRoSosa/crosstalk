@@ -11,10 +11,13 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ExampleRouteImport } from './routes/example'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as StartRouteImport } from './routes/start'
 import { Route as AiCallbackRouteImport } from './routes/ai/callback'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
+import { Route as ApiAccountIndexRouteImport } from './routes/api/account/index'
 import { Route as ApiAccountMergeRouteImport } from './routes/api/account/merge'
 import { Route as ApiAiConnectionRouteImport } from './routes/api/ai/connection'
 import { Route as ApiChatIndexRouteImport } from './routes/api/chat/index'
@@ -39,6 +42,16 @@ const ExampleRoute = ExampleRouteImport.update({
   path: '/example',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StartRoute = StartRouteImport.update({
   id: '/start',
   path: '/start',
@@ -57,6 +70,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
   path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAccountIndexRoute = ApiAccountIndexRouteImport.update({
+  id: '/api/account/',
+  path: '/api/account/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAccountMergeRoute = ApiAccountMergeRouteImport.update({
@@ -128,6 +146,8 @@ const ApiNucleiNucleusIdReadRoute = ApiNucleiNucleusIdReadRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/example': typeof ExampleRoute
+  '/privacy': typeof PrivacyRoute
+  '/profile': typeof ProfileRoute
   '/start': typeof StartRoute
   '/ai/callback': typeof AiCallbackRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -139,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/api/tracks/transfer': typeof ApiTracksTransferRoute
   '/api/tracks/video': typeof ApiTracksVideoRoute
   '/app/n/$nucleusId': typeof AppNNucleusIdRoute
+  '/api/account/': typeof ApiAccountIndexRoute
   '/api/chat/': typeof ApiChatIndexRoute
   '/api/nuclei/': typeof ApiNucleiIndexRoute
   '/api/tracks/': typeof ApiTracksIndexRoute
@@ -149,6 +170,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/example': typeof ExampleRoute
+  '/privacy': typeof PrivacyRoute
+  '/profile': typeof ProfileRoute
   '/start': typeof StartRoute
   '/ai/callback': typeof AiCallbackRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -160,6 +183,7 @@ export interface FileRoutesByTo {
   '/api/tracks/transfer': typeof ApiTracksTransferRoute
   '/api/tracks/video': typeof ApiTracksVideoRoute
   '/app/n/$nucleusId': typeof AppNNucleusIdRoute
+  '/api/account': typeof ApiAccountIndexRoute
   '/api/chat': typeof ApiChatIndexRoute
   '/api/nuclei': typeof ApiNucleiIndexRoute
   '/api/tracks': typeof ApiTracksIndexRoute
@@ -171,6 +195,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/example': typeof ExampleRoute
+  '/privacy': typeof PrivacyRoute
+  '/profile': typeof ProfileRoute
   '/start': typeof StartRoute
   '/ai/callback': typeof AiCallbackRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -182,6 +208,7 @@ export interface FileRoutesById {
   '/api/tracks/transfer': typeof ApiTracksTransferRoute
   '/api/tracks/video': typeof ApiTracksVideoRoute
   '/app/n/$nucleusId': typeof AppNNucleusIdRoute
+  '/api/account/': typeof ApiAccountIndexRoute
   '/api/chat/': typeof ApiChatIndexRoute
   '/api/nuclei/': typeof ApiNucleiIndexRoute
   '/api/tracks/': typeof ApiTracksIndexRoute
@@ -194,6 +221,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/example'
+    | '/privacy'
+    | '/profile'
     | '/start'
     | '/ai/callback'
     | '/auth/callback'
@@ -205,6 +234,7 @@ export interface FileRouteTypes {
     | '/api/tracks/transfer'
     | '/api/tracks/video'
     | '/app/n/$nucleusId'
+    | '/api/account/'
     | '/api/chat/'
     | '/api/nuclei/'
     | '/api/tracks/'
@@ -215,6 +245,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/example'
+    | '/privacy'
+    | '/profile'
     | '/start'
     | '/ai/callback'
     | '/auth/callback'
@@ -226,6 +258,7 @@ export interface FileRouteTypes {
     | '/api/tracks/transfer'
     | '/api/tracks/video'
     | '/app/n/$nucleusId'
+    | '/api/account'
     | '/api/chat'
     | '/api/nuclei'
     | '/api/tracks'
@@ -236,6 +269,8 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/example'
+    | '/privacy'
+    | '/profile'
     | '/start'
     | '/ai/callback'
     | '/auth/callback'
@@ -247,6 +282,7 @@ export interface FileRouteTypes {
     | '/api/tracks/transfer'
     | '/api/tracks/video'
     | '/app/n/$nucleusId'
+    | '/api/account/'
     | '/api/chat/'
     | '/api/nuclei/'
     | '/api/tracks/'
@@ -258,6 +294,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ExampleRoute: typeof ExampleRoute
+  PrivacyRoute: typeof PrivacyRoute
+  ProfileRoute: typeof ProfileRoute
   StartRoute: typeof StartRoute
   AiCallbackRoute: typeof AiCallbackRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
@@ -269,6 +307,7 @@ export interface RootRouteChildren {
   ApiTracksTransferRoute: typeof ApiTracksTransferRoute
   ApiTracksVideoRoute: typeof ApiTracksVideoRoute
   AppNNucleusIdRoute: typeof AppNNucleusIdRoute
+  ApiAccountIndexRoute: typeof ApiAccountIndexRoute
   ApiChatIndexRoute: typeof ApiChatIndexRoute
   ApiNucleiIndexRoute: typeof ApiNucleiIndexRoute
   ApiTracksIndexRoute: typeof ApiTracksIndexRoute
@@ -291,6 +330,20 @@ declare module '@tanstack/react-router' {
       path: '/example'
       fullPath: '/example'
       preLoaderRoute: typeof ExampleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/start': {
@@ -319,6 +372,13 @@ declare module '@tanstack/react-router' {
       path: '/auth/callback'
       fullPath: '/auth/callback'
       preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/account/': {
+      id: '/api/account/'
+      path: '/api/account'
+      fullPath: '/api/account/'
+      preLoaderRoute: typeof ApiAccountIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/account/merge': {
@@ -418,6 +478,8 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ExampleRoute: ExampleRoute,
+  PrivacyRoute: PrivacyRoute,
+  ProfileRoute: ProfileRoute,
   StartRoute: StartRoute,
   AiCallbackRoute: AiCallbackRoute,
   AuthCallbackRoute: AuthCallbackRoute,
@@ -429,6 +491,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiTracksTransferRoute: ApiTracksTransferRoute,
   ApiTracksVideoRoute: ApiTracksVideoRoute,
   AppNNucleusIdRoute: AppNNucleusIdRoute,
+  ApiAccountIndexRoute: ApiAccountIndexRoute,
   ApiChatIndexRoute: ApiChatIndexRoute,
   ApiNucleiIndexRoute: ApiNucleiIndexRoute,
   ApiTracksIndexRoute: ApiTracksIndexRoute,
