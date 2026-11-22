@@ -7,7 +7,7 @@ import { fetchSpotifyMetadata } from './spotify'
 import { fetchDeezerTrack, type DeezerTrack } from './deezer'
 import { findGeniusSongUrl } from './genius'
 import { findLyrics } from './lrclib'
-import { analyzeLyricsWithRotation, getGeminiApiKeys } from './gemini'
+import { analyzeLyrics } from './ai/analysis'
 import {
   addTrackToNucleus,
   findAnalyzedTrackByIsrc,
@@ -22,9 +22,7 @@ import { getAdminClient } from './supabase/server'
 import { log } from './log'
 import type { UserContext } from './session'
 import type { TrackRow } from './supabase/database.types'
-import { isEmotion, type SpotifyMetadata, type Track } from '../types/track'
-
-const ANALYSIS_MODEL = 'gemini-2.5-flash'
+import type { SpotifyMetadata, Track } from '../types/track'
 
 export type AddTrackResult = { status: 'added'; track: Track } | { status: 'already_in_nucleus'; track: Track }
 
@@ -38,12 +36,6 @@ interface TrackCandidate {
   album: string | null
   cover_url: string | null
   duration_ms: number | null
-}
-
-function clamp01(value: unknown): number | null {
-  const n = typeof value === 'number' ? value : Number(value)
-  if (!Number.isFinite(n)) return null
-  return Math.min(1, Math.max(0, n))
 }
 
 function fromSpotify(metadata: SpotifyMetadata): TrackCandidate {
@@ -79,7 +71,10 @@ async function linkToNucleus(ctx: UserContext, row: TrackRow): Promise<AddTrackR
   return { status: 'added', track: toTrack(row, addedAt) }
 }
 
-async function analyzeCandidate(candidate: TrackCandidate, existingId?: number): Promise<TrackRow> {
+async function analyzeCandidate(ctx: UserContext, candidate: TrackCandidate, existingId?: number): Promise<TrackRow> {
+  // Check the AI connection first, so songs aren't looked up for nothing when it's missing
+  const apiKey = await ctx.getAiKey()
+
   const label = `${candidate.title} - ${candidate.artist}`
   log.info('pipeline', 'analyzing new track', { track: label, spotifyId: candidate.spotify_id, deezerId: candidate.deezer_id })
 
@@ -105,31 +100,26 @@ async function analyzeCandidate(candidate: TrackCandidate, existingId?: number):
     })
   }
 
-  const geminiApiKeys = getGeminiApiKeys()
-  if (geminiApiKeys.length === 0) {
-    throw new Error('No Gemini API keys configured')
-  }
   // Lyrics are only used here, for the analysis. They are not stored.
-  const analysis = await analyzeLyricsWithRotation(lyricsResult.lyrics, candidate.title, candidate.artist, geminiApiKeys)
-  const emotion = typeof analysis.emotion === 'string' ? analysis.emotion.toLowerCase().trim() : analysis.emotion
-  if (!isEmotion(emotion)) {
-    log.warn('pipeline', 'AI returned an invalid emotion', { track: label, emotion: analysis.emotion })
-    throw new HttpError(502, 'The AI returned an unexpected analysis. Please try again.')
-  }
-  log.info('pipeline', 'track analyzed', { track: label, emotion })
+  const analysis = await analyzeLyrics(ctx.userId, apiKey, {
+    title: candidate.title,
+    artist: candidate.artist,
+    lyrics: lyricsResult.lyrics,
+  })
+  log.info('pipeline', 'track analyzed', { track: label, emotion: analysis.emotion, model: analysis.model })
 
   return saveCatalogTrack(
     getAdminClient(),
     {
       ...candidate,
       genius_url: geniusUrl,
-      emotion,
-      valence: clamp01(analysis.valence),
-      energy: clamp01(analysis.energy),
+      emotion: analysis.emotion,
+      valence: analysis.valence,
+      energy: analysis.energy,
       genre: analysis.genre || null,
       mood_description: analysis.mood_description || null,
-      lyrical_style: analysis.vocal_characteristics || null,
-      analysis_model: ANALYSIS_MODEL,
+      lyrical_style: analysis.lyrical_style || null,
+      analysis_model: analysis.model,
       analyzed_at: new Date().toISOString(),
     },
     existingId,
@@ -158,7 +148,7 @@ async function addCandidate(ctx: UserContext, candidate: TrackCandidate, sameSou
     }
   }
 
-  const row = await analyzeCandidate(candidate, sameSourceRow?.id)
+  const row = await analyzeCandidate(ctx, candidate, sameSourceRow?.id)
   return linkToNucleus(ctx, row)
 }
 

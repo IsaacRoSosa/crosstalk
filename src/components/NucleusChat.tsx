@@ -68,7 +68,8 @@ export const NucleusChat = forwardRef<HTMLDivElement, NucleusChatProps>(function
 
       const data = await response.json()
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to send message')
+        // Expected problems (AI not connected, free limit reached...) come with a readable message
+        throw new Error(data.error || 'Failed to send message', { cause: 'server' })
       }
 
       setMessages(prev => [
@@ -87,7 +88,10 @@ export const NucleusChat = forwardRef<HTMLDivElement, NucleusChatProps>(function
         {
           id: Date.now() + 1,
           role: 'assistant',
-          content: 'something went wrong on my end. try again.',
+          content:
+            error instanceof Error && error.cause === 'server'
+              ? error.message
+              : 'something went wrong on my end. try again.',
           created_at: new Date().toISOString(),
         },
       ])

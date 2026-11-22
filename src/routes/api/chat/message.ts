@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { chatWithRotation, getGeminiApiKeys } from '../../../lib/gemini'
+import { chatReply } from '../../../lib/ai/analysis'
 import { errorResponse, HttpError, json } from '../../../lib/http'
 import { requireUser } from '../../../lib/session'
 import { addMessages, listMessages, listNucleusTracks } from '../../../lib/repository'
@@ -98,10 +98,7 @@ export const Route = createFileRoute('/api/chat/message')({
             throw new HttpError(400, `Messages can be up to ${MAX_MESSAGE_LENGTH} characters`)
           }
 
-          const geminiApiKeys = getGeminiApiKeys()
-          if (geminiApiKeys.length === 0) {
-            throw new Error('No Gemini API keys configured')
-          }
+          const apiKey = await ctx.getAiKey()
 
           const [tracks, history] = await Promise.all([
             listNucleusTracks(ctx.db, ctx.nucleus.id),
@@ -110,14 +107,7 @@ export const Route = createFileRoute('/api/chat/message')({
 
           const systemPrompt = `${describeCollection(ctx.nucleus.name, tracks)}\n\n${HOW_TO_TALK}`
 
-          const response = await chatWithRotation(geminiApiKeys, [
-            { role: 'user', parts: [{ text: systemPrompt }] },
-            ...history.map((msg) => ({
-              role: msg.role === 'user' ? 'user' : 'model',
-              parts: [{ text: msg.content }],
-            })),
-            { role: 'user', parts: [{ text: message }] },
-          ])
+          const response = await chatReply(ctx.userId, apiKey, systemPrompt, history, message)
 
           const reply = response.trim().slice(0, 8000) || '...'
           await addMessages(ctx.db, ctx.nucleus.id, [

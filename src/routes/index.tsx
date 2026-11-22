@@ -4,6 +4,7 @@ import { Music, Sparkles, Plus, Trash2, ChevronDown, ChevronUp, Pause, Play, Vol
 import { NucleusVisualization } from '../components/NucleusVisualization'
 import type { NucleusVisualizationHandle } from '../components/NucleusVisualization'
 import { NucleusChat } from '../components/NucleusChat'
+import { AiConnectionPanel } from '../components/AiConnectionPanel'
 import type { Track } from '../types/track'
 import { apiFetch } from '../lib/api-client'
 import { isEmptyImport, parseImportInput } from '../lib/import-input'
@@ -53,6 +54,8 @@ function App() {
   const [tracks, setTracks] = useState<Track[]>([])
   const [importInput, setImportInput] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  // Bumped when the server says the AI isn't connected, so the panel re-checks and stands out
+  const [aiPanelRefresh, setAiPanelRefresh] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [playlistProgress, setPlaylistProgress] = useState<{
     current: number
@@ -493,6 +496,9 @@ function App() {
         if (data.notice) summary.push(data.notice)
         setError(summary.join(' • '))
       }
+      if (data.aiError) {
+        setAiPanelRefresh(n => n + 1)
+      }
 
       // Rename the nucleus every time the collection passes a multiple of 5 tracks
       const newCount = previousCount + data.successCount
@@ -640,6 +646,8 @@ function App() {
       {/* Sidebar */}
       <div className={`fixed top-0 w-80 h-screen bg-black border-l border-white/20 overflow-y-auto z-40 transition-[right] duration-300 ${sidebarCollapsed ? '-right-80' : 'right-0'}`}>
         <div className="pb-4 px-4 pt-4">
+          <AiConnectionPanel refreshToken={aiPanelRefresh} highlight={aiPanelRefresh > 0} />
+
           {/* Add Track Input */}
           <div className="mb-4">
             <div className="flex gap-2">

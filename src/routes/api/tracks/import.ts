@@ -80,11 +80,15 @@ export const Route = createFileRoute('/api/tracks/import')({
             jobs: jobs.length,
           })
 
+          // AI problems that would make every remaining new song fail the same way
+          const STOP_CODES = new Set(['ai_not_connected', 'ai_rate_limited', 'ai_data_policy', 'ai_payment_required'])
+          let stopError: HttpError | null = null
+
           const success: Track[] = []
           const skipped: Array<{ track: string; artist: string; reason: string }> = []
           const failed: Array<{ track: string; artist: string; reason: string; debug?: Record<string, unknown> }> = []
 
-          // Sequential on purpose: keeps us well inside Genius, Gemini and Deezer rate limits,
+          // Sequential on purpose: keeps us inside LRCLIB, Deezer and OpenRouter's free-model rate limits,
           // and lets the client show tracks appearing one by one while it polls.
           for (const job of jobs.slice(0, MAX_ATTEMPTS)) {
             if (success.length >= TARGET_SUCCESS) break
@@ -96,6 +100,15 @@ export const Route = createFileRoute('/api/tracks/import')({
                 skipped.push({ track: result.track.title, artist: result.track.artist, reason: 'Already in collection' })
               }
             } catch (error) {
+              const code = error instanceof HttpError ? error.body?.code : undefined
+              if (typeof code === 'string' && STOP_CODES.has(code) && !stopError) {
+                // Songs already in the catalog don't need AI, so keep going but only for those:
+                // from now on, songs that need analysis fail right away instead of retrying the AI
+                // (failed requests also count toward OpenRouter's free daily limit)
+                const blocked = error as HttpError
+                stopError = blocked
+                ctx.getAiKey = () => Promise.reject(blocked)
+              }
               if (!(error instanceof HttpError)) console.error(`Error importing ${job.label}:`, error)
               failed.push({
                 track: job.label,
@@ -121,7 +134,8 @@ export const Route = createFileRoute('/api/tracks/import')({
             tracks: success,
             skipped,
             failed,
-            notice: parsed.spotifyPlaylistIds.length > 0 ? SPOTIFY_PLAYLIST_HELP : undefined,
+            notice: stopError?.message ?? (parsed.spotifyPlaylistIds.length > 0 ? SPOTIFY_PLAYLIST_HELP : undefined),
+            aiError: stopError?.body?.code,
           })
         } catch (error) {
           return errorResponse(error, 'Error importing tracks')

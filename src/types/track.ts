@@ -45,15 +45,3 @@ export interface SpotifyMetadata {
     spotify: string
   }
 }
-
-export interface AnalysisResult {
-  emotion: Emotion
-  valence: number
-  energy: number
-  genre: string
-  mood_description: string
-  vocal_characteristics: string
-  // Only returned by the (unused) audio analysis prompt
-  tempo?: number
-  dominant_instruments?: string
-}
