@@ -1,11 +1,12 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { NucleusVisualization } from '../components/NucleusVisualization'
-import { Eyebrow, GhostButton, Panel, PanelHeader, PrimaryButton, ghostButtonClass, primaryButtonClass, Wordmark } from '../components/ui'
+import { Eyebrow, GhostButton, Panel, PanelHeader, PrimaryButton, PulseDot, ghostButtonClass, primaryButtonClass, Wordmark } from '../components/ui'
 import { apiFetch } from '../lib/api-client'
 import { isEmptyImport, parseImportInput, type ParsedImportInput } from '../lib/import-input'
-import { importSongs, type ImportResult } from '../lib/import-client'
+import { importSongs, type ImportProgress, type ImportResult } from '../lib/import-client'
 import { ApiError, autoNameNucleus, createNucleus, listTracks } from '../lib/nuclei-client'
+import { MAX_SONGS_PER_IMPORT } from '../types/nucleus'
 import { listenForAiConnected, startOpenRouterConnect } from '../lib/openrouter-connect'
 import { getTemp, removeTemp, setTemp } from '../lib/temp-storage'
 import type { Track } from '../types/track'
@@ -112,11 +113,39 @@ function MusicStep({ onContinue }: { onContinue: () => void }) {
             in to.
           </p>
 
+          {/* The recommended source: what you actually play, not what you'd pick to show */}
+          <div className="border border-white/40 bg-white/[0.03] p-4">
+            <div className="flex items-center gap-2">
+              <PulseDot size={6} />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.15em]">best: your on repeat</span>
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-white/60">
+              spotify's on repeat is the songs you've actually been playing, not the ones you'd choose to show. that makes it
+              the most honest first impression.
+            </p>
+            <ol className="mt-3 space-y-1 text-[11px] leading-relaxed text-white/70">
+              <li>
+                <span className="text-white/35">1.</span> open the spotify desktop app (copying many songs doesn't work on phones)
+              </li>
+              <li>
+                <span className="text-white/35">2.</span> find <span className="text-white">on repeat</span> in search or under made
+                for you
+              </li>
+              <li>
+                <span className="text-white/35">3.</span> click any song, then select all (cmd/ctrl+a) and copy (cmd/ctrl+c)
+              </li>
+              <li>
+                <span className="text-white/35">4.</span> paste below. all {MAX_SONGS_PER_IMPORT} fit.
+              </li>
+            </ol>
+          </div>
+
           <div className="space-y-3 text-[11px] leading-relaxed">
+            <div className="text-[10px] uppercase tracking-[0.15em] text-white/35">or</div>
             <SourceRow
               mark="S"
-              name="spotify"
-              detail="in the desktop app, open a playlist, select songs (cmd/ctrl+a) and copy them (cmd/ctrl+c)"
+              name="any spotify songs"
+              detail="the same way from any playlist: select songs (cmd/ctrl+a) and copy them (cmd/ctrl+c)"
             />
             <SourceRow mark="D" name="deezer" detail="paste a link to a public playlist or a song" />
             <SourceRow mark="A" name="apple music" detail="coming later" muted />
@@ -135,7 +164,7 @@ function MusicStep({ onContinue }: { onContinue: () => void }) {
             {onlySpotifyPlaylists
               ? "spotify doesn't let apps read playlists. copy the songs from the playlist instead (see above)."
               : detected.length > 0
-                ? `found ${detected.join(' · ')}${songs > 25 || playlists > 0 ? ' · the first 25 with lyrics will be added' : ''}${parsed.spotifyPlaylistIds.length > 0 ? " · spotify playlist links are skipped (copy their songs instead)" : ''}`
+                ? `found ${detected.join(' · ')}${songs > MAX_SONGS_PER_IMPORT || playlists > 0 ? ` · the first ${MAX_SONGS_PER_IMPORT} with lyrics will be added` : ''}${parsed.spotifyPlaylistIds.length > 0 ? " · spotify playlist links are skipped (copy their songs instead)" : ''}`
                 : input.trim()
                   ? "no spotify or deezer links found yet"
                   : ''}
@@ -318,14 +347,37 @@ type ImportSummary = Pick<ImportResult, 'successCount' | 'skippedCount' | 'faile
 
 type Phase = 'importing' | 'naming' | 'done' | 'failed'
 
+// The song being read right now, and how far along it is
+interface CurrentSong {
+  position: number
+  total: number
+  title: string
+  artist: string
+  cover_url: string | null
+  stage: 'looking up' | 'already read' | 'finding lyrics' | 'reading the mood'
+}
+
+interface SongResult {
+  key: number
+  status: 'added' | 'skipped' | 'failed'
+  title: string
+  artist: string
+  reason?: string
+}
+
+const RECENT_RESULTS = 4
+
 function FormingStep({ onBack }: { onBack: () => void }) {
   const [tracks, setTracks] = useState<Track[]>([])
   const [phase, setPhase] = useState<Phase>('importing')
   const [summary, setSummary] = useState<ImportSummary | null>(null)
   const [nucleusName, setNucleusName] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [expected, setExpected] = useState(25)
+  const [expected, setExpected] = useState(MAX_SONGS_PER_IMPORT)
   const [added, setAdded] = useState(0)
+  const [processed, setProcessed] = useState(0)
+  const [current, setCurrent] = useState<CurrentSong | null>(null)
+  const [recent, setRecent] = useState<SongResult[]>([])
   const [nucleusId, setNucleusId] = useState<number | null>(null)
   const started = useRef(false)
 
@@ -354,7 +406,7 @@ function FormingStep({ onBack }: { onBack: () => void }) {
       return
     }
     const parsed = parseImportInput(input)
-    setExpected(hasPlaylist(parsed) ? 25 : Math.max(1, Math.min(countSongs(parsed), 25)))
+    setExpected(hasPlaylist(parsed) ? MAX_SONGS_PER_IMPORT : Math.max(1, Math.min(countSongs(parsed), MAX_SONGS_PER_IMPORT)))
     setPhase('importing')
     setError(null)
 
@@ -366,23 +418,45 @@ function FormingStep({ onBack }: { onBack: () => void }) {
       setPhase('failed')
       return
     }
-    const before = target.tracks.length
     setNucleusId(target.id)
     setTracks(target.tracks)
+    setAdded(0)
+    setProcessed(0)
+    setRecent([])
+    setCurrent(null)
 
-    // Show songs entering orbit while the import runs
-    const poll = setInterval(async () => {
-      try {
-        const data = await listTracks(target.id)
-        setTracks(data.tracks)
-        setAdded(Math.max(0, data.tracks.length - before))
-      } catch {
-        // keep polling
+    // Follow the import song by song; added songs enter orbit right away
+    let resultKey = 0
+    const finishSong = (result: Omit<SongResult, 'key'>) => {
+      setProcessed((n) => n + 1)
+      setRecent((prev) => [{ ...result, key: resultKey++ }, ...prev].slice(0, RECENT_RESULTS))
+    }
+    const onProgress = (progress: ImportProgress) => {
+      switch (progress.type) {
+        case 'start':
+          setExpected(Math.max(1, progress.total))
+          break
+        case 'song':
+          setCurrent({ ...progress, stage: progress.cached ? 'already read' : 'looking up' })
+          break
+        case 'stage':
+          setCurrent((prev) => prev && { ...prev, stage: progress.stage === 'lyrics' ? 'finding lyrics' : 'reading the mood' })
+          break
+        case 'added':
+          setTracks((prev) => [progress.track, ...prev.filter((t) => t.id !== progress.track.id)])
+          setAdded((n) => n + 1)
+          finishSong({ status: 'added', title: progress.track.title, artist: progress.track.artist })
+          break
+        case 'skipped':
+        case 'failed':
+          finishSong({ status: progress.type, title: progress.title, artist: progress.artist, reason: progress.reason })
+          break
       }
-    }, 2000)
+    }
 
     try {
-      const data = await importSongs(target.id, input)
+      const data = await importSongs(target.id, input, onProgress)
+      setCurrent(null)
       setSummary(data)
       setAdded(data.successCount)
 
@@ -405,10 +479,9 @@ function FormingStep({ onBack }: { onBack: () => void }) {
       }
       setPhase('done')
     } catch (err) {
+      setCurrent(null)
       setError(err instanceof Error ? err.message : 'Could not add your songs')
       setPhase('failed')
-    } finally {
-      clearInterval(poll)
     }
   }, [onBack])
 
@@ -424,16 +497,9 @@ function FormingStep({ onBack }: { onBack: () => void }) {
   useEffect(() => (needsAiNow ? listenForAiConnected(() => run()) : undefined), [needsAiNow, run])
 
   const done = phase === 'done'
-  const pct = done ? 100 : Math.min(95, Math.round((added / expected) * 100))
+  const pct = done ? 100 : Math.min(95, Math.round((processed / expected) * 100))
   const needsAi = summary?.aiError === 'ai_not_connected'
 
-  const steps: Array<{ label: string; state: 'done' | 'active' | 'waiting'; count?: string }> = [
-    { label: 'finding your songs', state: 'done', count: String(expected) },
-    { label: 'finding lyrics on lrclib', state: phase === 'importing' ? 'active' : 'done' },
-    { label: 'reading mood with a free model', state: phase === 'importing' ? 'active' : 'done' },
-    { label: 'placing songs into orbits', state: phase === 'importing' && added === 0 ? 'waiting' : phase === 'importing' ? 'active' : 'done', count: String(added) },
-    { label: 'naming the nucleus', state: phase === 'naming' ? 'active' : done ? 'done' : 'waiting' },
-  ]
 
   const title = done
     ? nucleusName
@@ -443,7 +509,7 @@ function FormingStep({ onBack }: { onBack: () => void }) {
         : 'your nucleus is ready'
     : phase === 'failed'
       ? 'something went wrong'
-      : `reading ${expected === 25 ? 'your' : expected} song${expected === 1 ? '' : 's'}`
+      : `reading ${expected} song${expected === 1 ? '' : 's'}`
 
   return (
     <div className="relative h-screen min-h-[560px] overflow-hidden bg-black text-white">
@@ -463,20 +529,66 @@ function FormingStep({ onBack }: { onBack: () => void }) {
       <div className="absolute left-6 top-6 w-[min(340px,calc(100%-3rem))] md:left-10 md:top-10">
         <Eyebrow className="mb-3 text-white/40">forming</Eyebrow>
         <h1 className="mb-5 text-2xl font-semibold leading-snug tracking-tight">{title}</h1>
-        <ul className="space-y-2">
-          {steps.map((s) => (
-            <li
-              key={s.label}
-              className={`flex items-center gap-2.5 text-[10px] ${s.state === 'waiting' ? 'text-white/30' : s.state === 'active' ? 'text-white' : 'text-white/60'}`}
-            >
-              <span
-                className={`h-1.5 w-1.5 shrink-0 rounded-full ${s.state === 'active' ? 'ct-pulse-dot' : s.state === 'done' ? 'bg-white/60' : 'bg-white/20'}`}
-              />
-              <span className="flex-1">{s.label}</span>
-              {s.count && <span className="text-white/30">{s.count}</span>}
-            </li>
-          ))}
-        </ul>
+        {/* The song being read right now */}
+        {(current || phase === 'naming') && (
+          <div className="mb-4 flex items-center gap-3 border border-white/20 bg-black/70 p-2.5">
+            {phase === 'naming' ? (
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center border border-white/15">
+                <span className="ct-pulse-dot h-1.5 w-1.5" />
+              </span>
+            ) : current?.cover_url ? (
+              <img key={current.cover_url} src={current.cover_url} alt="" className="ct-fade-up h-11 w-11 shrink-0 object-cover" />
+            ) : (
+              <span className="h-11 w-11 shrink-0 border border-white/15" />
+            )}
+            <div className="min-w-0 flex-1">
+              {phase === 'naming' ? (
+                <div className="text-xs text-white">naming the nucleus</div>
+              ) : (
+                current && (
+                  <>
+                    <div className="truncate text-xs text-white">{current.title}</div>
+                    <div className="truncate text-[10px] text-white/50">{current.artist}</div>
+                    <div className="mt-1 flex items-center gap-1.5 text-[9px] uppercase tracking-[0.15em] text-white/40">
+                      <span className="ct-pulse-dot h-1 w-1" />
+                      {current.stage} · {current.position} of {current.total}
+                    </div>
+                  </>
+                )
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* What just happened to the last few songs */}
+        {recent.length > 0 && (
+          <ul className="space-y-1.5">
+            {recent.map((r, i) => (
+              <li
+                key={r.key}
+                className={`flex items-start gap-2 text-[10px] leading-snug ${i === 0 ? 'ct-fade-up' : ''}`}
+                style={{ opacity: 1 - i * 0.18 }}
+              >
+                <span className={`w-3 shrink-0 ${r.status === 'added' ? 'text-white' : 'text-white/40'}`}>
+                  {r.status === 'added' ? '+' : '–'}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={r.status === 'added' ? 'text-white/80' : 'text-white/45'}>
+                    {r.title}
+                    {r.artist && <span className="text-white/35"> · {r.artist}</span>}
+                  </span>
+                  {r.status !== 'added' && r.reason && <span className="block text-white/30">{r.reason}</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {phase === 'importing' && !current && recent.length === 0 && (
+          <p className="text-[10px] text-white/40">
+            <span className="ct-pulse-dot mr-2 inline-block h-1 w-1 align-middle" />
+            finding your songs
+          </p>
+        )}
 
         {done && summary && (
           <p className="ct-fade-up mt-5 text-[11px] leading-relaxed text-white/60">
@@ -495,7 +607,9 @@ function FormingStep({ onBack }: { onBack: () => void }) {
 
       <div className="absolute inset-x-6 bottom-6 md:inset-x-10 md:bottom-10">
         <div className="mb-2.5 flex items-end justify-between">
-          <div className="text-[10px] text-white/50">lyrics → mood → orbit placement</div>
+          <div className="text-[10px] text-white/50">
+            {processed > 0 ? `${processed} of ${expected} read · ${added} in orbit` : 'lyrics → mood → orbit placement'}
+          </div>
           <div className="text-[22px] font-semibold">{pct}%</div>
         </div>
         <div className="h-0.5 bg-white/15">

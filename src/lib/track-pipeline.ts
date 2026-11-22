@@ -26,6 +26,14 @@ import type { SpotifyMetadata, Track } from '../types/track'
 
 export type AddTrackResult = { status: 'added'; track: Track } | { status: 'already_in_nucleus'; track: Track }
 
+// Where the pipeline is with a song, so imports can show it to the user as it happens
+export type PipelineProgress =
+  | { stage: 'song'; song: { title: string; artist: string; cover_url: string | null }; cached: boolean }
+  | { stage: 'lyrics' }
+  | { stage: 'analysis' }
+
+export type OnProgress = (progress: PipelineProgress) => void
+
 // What we know about a song before analysing it, whatever the source
 interface TrackCandidate {
   spotify_id?: string
@@ -62,6 +70,10 @@ function fromDeezer(track: DeezerTrack): TrackCandidate {
   }
 }
 
+function reportCached(row: TrackRow, onProgress?: OnProgress) {
+  onProgress?.({ stage: 'song', song: { title: row.title, artist: row.artist, cover_url: row.cover_url }, cached: true })
+}
+
 async function linkToNucleus(ctx: NucleusContext, row: TrackRow): Promise<AddTrackResult> {
   const existing = await getNucleusTrackAddedAt(ctx.db, ctx.nucleus.id, row.id)
   if (existing) {
@@ -71,13 +83,19 @@ async function linkToNucleus(ctx: NucleusContext, row: TrackRow): Promise<AddTra
   return { status: 'added', track: toTrack(row, addedAt) }
 }
 
-async function analyzeCandidate(ctx: NucleusContext, candidate: TrackCandidate, existingId?: number): Promise<TrackRow> {
+async function analyzeCandidate(
+  ctx: NucleusContext,
+  candidate: TrackCandidate,
+  existingId: number | undefined,
+  onProgress?: OnProgress,
+): Promise<TrackRow> {
   // Check the AI connection first, so songs aren't looked up for nothing when it's missing
   const apiKey = await ctx.getAiKey()
 
   const label = `${candidate.title} - ${candidate.artist}`
   log.info('pipeline', 'analyzing new track', { track: label, spotifyId: candidate.spotify_id, deezerId: candidate.deezer_id })
 
+  onProgress?.({ stage: 'lyrics' })
   const [lyricsResult, geniusUrl] = await Promise.all([
     findLyrics({
       title: candidate.title,
@@ -101,6 +119,7 @@ async function analyzeCandidate(ctx: NucleusContext, candidate: TrackCandidate, 
   }
 
   // Lyrics are only used here, for the analysis. They are not stored.
+  onProgress?.({ stage: 'analysis' })
   const analysis = await analyzeLyrics(ctx.userId, apiKey, {
     title: candidate.title,
     artist: candidate.artist,
@@ -127,7 +146,17 @@ async function analyzeCandidate(ctx: NucleusContext, candidate: TrackCandidate, 
 }
 
 // Reuses the catalog when possible (same source id, or same ISRC from the other source); analyses otherwise.
-async function addCandidate(ctx: NucleusContext, candidate: TrackCandidate, sameSourceRow: TrackRow | null): Promise<AddTrackResult> {
+async function addCandidate(
+  ctx: NucleusContext,
+  candidate: TrackCandidate,
+  sameSourceRow: TrackRow | null,
+  onProgress?: OnProgress,
+): Promise<AddTrackResult> {
+  onProgress?.({
+    stage: 'song',
+    song: { title: candidate.title, artist: candidate.artist, cover_url: candidate.cover_url },
+    cached: false,
+  })
   if (sameSourceRow?.analyzed_at) {
     log.info('pipeline', 'reusing analyzed track', { trackId: sameSourceRow.id, match: 'source id' })
     return linkToNucleus(ctx, sameSourceRow)
@@ -148,13 +177,14 @@ async function addCandidate(ctx: NucleusContext, candidate: TrackCandidate, same
     }
   }
 
-  const row = await analyzeCandidate(ctx, candidate, sameSourceRow?.id)
+  const row = await analyzeCandidate(ctx, candidate, sameSourceRow?.id, onProgress)
   return linkToNucleus(ctx, row)
 }
 
-export async function addSpotifyTrack(ctx: NucleusContext, spotifyId: string): Promise<AddTrackResult> {
+export async function addSpotifyTrack(ctx: NucleusContext, spotifyId: string, onProgress?: OnProgress): Promise<AddTrackResult> {
   const known = await findTrackBySpotifyId(ctx.db, spotifyId)
   if (known?.analyzed_at) {
+    reportCached(known, onProgress)
     return linkToNucleus(ctx, known)
   }
 
@@ -165,14 +195,19 @@ export async function addSpotifyTrack(ctx: NucleusContext, spotifyId: string): P
     console.error(`Error fetching Spotify track ${spotifyId}:`, error)
     throw new HttpError(502, 'Could not get this track from Spotify')
   }
-  return addCandidate(ctx, fromSpotify(metadata), known)
+  return addCandidate(ctx, fromSpotify(metadata), known, onProgress)
 }
 
 // Accepts a Deezer track id, or a track object from a playlist listing (which lacks the ISRC)
-export async function addDeezerTrack(ctx: NucleusContext, track: number | DeezerTrack): Promise<AddTrackResult> {
+export async function addDeezerTrack(
+  ctx: NucleusContext,
+  track: number | DeezerTrack,
+  onProgress?: OnProgress,
+): Promise<AddTrackResult> {
   const deezerId = typeof track === 'number' ? track : track.id
   const known = await findTrackByDeezerId(ctx.db, deezerId)
   if (known?.analyzed_at) {
+    reportCached(known, onProgress)
     return linkToNucleus(ctx, known)
   }
 
@@ -183,5 +218,5 @@ export async function addDeezerTrack(ctx: NucleusContext, track: number | Deezer
     console.error(`Error fetching Deezer track ${deezerId}:`, error)
     throw new HttpError(502, 'Could not get this track from Deezer')
   }
-  return addCandidate(ctx, fromDeezer(full), known)
+  return addCandidate(ctx, fromDeezer(full), known, onProgress)
 }

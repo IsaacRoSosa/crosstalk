@@ -1,16 +1,19 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { errorResponse, HttpError, json } from '../../../lib/http'
-import { requireNucleus, requireUser } from '../../../lib/session'
+import { errorResponse, HttpError } from '../../../lib/http'
+import { requireNucleus, requireUser, type NucleusContext } from '../../../lib/session'
 import { isEmptyImport, parseImportInput } from '../../../lib/import-input'
 import { fetchDeezerPlaylistTracks, resolveDeezerShortLink, type DeezerTrack } from '../../../lib/deezer'
-import { addDeezerTrack, addSpotifyTrack, type AddTrackResult } from '../../../lib/track-pipeline'
+import { addDeezerTrack, addSpotifyTrack, type AddTrackResult, type OnProgress } from '../../../lib/track-pipeline'
 import { log } from '../../../lib/log'
 import type { Track } from '../../../types/track'
+import type { ImportEvent, ImportIssue } from '../../../types/import'
+import { MAX_SONGS_PER_IMPORT, MAX_TRACKS_PER_NUCLEUS } from '../../../types/nucleus'
+import { countNucleusTracks } from '../../../lib/repository'
 
 // Stop after adding this many tracks in one import
-const TARGET_SUCCESS = 25
+const TARGET_SUCCESS = MAX_SONGS_PER_IMPORT
 // Upper bound on songs looked at per import (some fail, e.g. instrumentals without lyrics)
-const MAX_ATTEMPTS = 40
+const MAX_ATTEMPTS = 45
 const MAX_INPUT_LENGTH = 50_000
 // Serverless functions get cut off (Vercel Hobby: 300 s). Stop starting new songs after this long
 // and hand the rest back to the client, which sends them in the next request. One song can take
@@ -24,19 +27,148 @@ interface ImportJob {
   label: string
   // A link that imports this same song, used to hand unfinished songs back to the client
   link: string
-  run: () => Promise<AddTrackResult>
+  run: (onProgress: OnProgress) => Promise<AddTrackResult>
 }
 
 function clampCount(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
 }
 
+// AI problems that would make every remaining new song fail the same way
+const STOP_CODES = new Set(['ai_not_connected', 'ai_rate_limited', 'ai_data_policy', 'ai_payment_required'])
+
+// Processes the songs one by one, streaming an ImportEvent per line as it goes (see types/import.ts),
+// and ends with a `done` event carrying the same summary the client adds up across requests.
+function streamImport(
+  ctx: NucleusContext,
+  jobs: ImportJob[],
+  options: { targetSuccess: number; startedAt: number; notice?: string },
+): Response {
+  const encoder = new TextEncoder()
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (event: ImportEvent) => controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`))
+      try {
+        let stopError: HttpError | null = null
+        const success: Track[] = []
+        const skipped: ImportIssue[] = []
+        const failed: Array<ImportIssue & { debug?: Record<string, unknown> }> = []
+
+        send({ type: 'start', total: jobs.length })
+
+        // Sequential on purpose: keeps us inside LRCLIB, Deezer and OpenRouter's free-model rate limits,
+        // and lets the user follow along one song at a time.
+        let attempted = 0
+        let remaining: ImportJob[] = []
+        for (const [index, job] of jobs.entries()) {
+          if (success.length >= options.targetSuccess) break
+          // Always try at least one song per request, so every chunk makes progress
+          if (attempted > 0 && Date.now() - options.startedAt > TIME_BUDGET_MS) {
+            remaining = jobs.slice(index)
+            break
+          }
+          attempted++
+
+          // Until the pipeline knows the song's name, all we have is the job's label
+          let current = { title: job.label, artist: '' }
+          const onProgress: OnProgress = (progress) => {
+            if (progress.stage === 'song') {
+              current = { title: progress.song.title, artist: progress.song.artist }
+              send({ type: 'song', index, ...progress.song, cached: progress.cached })
+            } else {
+              send({ type: 'stage', stage: progress.stage })
+            }
+          }
+
+          try {
+            const result = await job.run(onProgress)
+            if (result.status === 'added') {
+              success.push(result.track)
+              send({ type: 'added', track: result.track })
+            } else {
+              const issue = { track: result.track.title, artist: result.track.artist, reason: 'Already in this nucleus' }
+              skipped.push(issue)
+              send({ type: 'skipped', title: issue.track, artist: issue.artist, reason: issue.reason })
+            }
+          } catch (error) {
+            const code = error instanceof HttpError ? error.body?.code : undefined
+            if (typeof code === 'string' && STOP_CODES.has(code) && !stopError) {
+              // Songs already in the catalog don't need AI, so keep going but only for those:
+              // from now on, songs that need analysis fail right away instead of retrying the AI
+              // (failed requests also count toward OpenRouter's free daily limit)
+              const blocked = error as HttpError
+              stopError = blocked
+              ctx.getAiKey = () => Promise.reject(blocked)
+            }
+            if (!(error instanceof HttpError)) console.error(`Error importing ${job.label}:`, error)
+            const issue = {
+              track: current.title,
+              artist: current.artist,
+              reason: error instanceof HttpError ? error.message : 'Could not analyze this track',
+              ...(process.env.NODE_ENV !== 'production' && error instanceof HttpError && error.body ? { debug: error.body } : {}),
+            }
+            failed.push(issue)
+            send({ type: 'failed', title: issue.track, artist: issue.artist, reason: issue.reason, debug: issue.debug })
+          }
+        }
+
+        // If the AI stopped working, the next request would just hit the same error (and spend
+        // another of the user's free daily requests), so don't hand anything back
+        const remainingInput = stopError ? null : remaining.map((job) => job.link).join('\n') || null
+
+        log.info('import', remainingInput ? 'import chunk finished' : 'import finished', {
+          added: success.length,
+          remaining: remainingInput ? remaining.length : 0,
+          seconds: Math.round((Date.now() - options.startedAt) / 1000),
+          skipped: skipped.length,
+          failed: failed.length,
+          failureReasons: failed.map((f) => f.debug?.reason ?? f.reason),
+        })
+
+        send({
+          type: 'done',
+          summary: {
+            successCount: success.length,
+            skippedCount: skipped.length,
+            failedCount: failed.length,
+            tracks: success,
+            skipped,
+            failed,
+            notice: stopError?.message ?? options.notice,
+            aiError: typeof stopError?.body?.code === 'string' ? stopError.body.code : undefined,
+            attempted,
+            remaining: remainingInput,
+          },
+        })
+      } catch (error) {
+        console.error('Error during import:', error)
+        send({ type: 'error', error: 'Something went wrong while adding your songs. Please try again.' })
+      } finally {
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'application/x-ndjson; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      // Ask proxies not to hold the stream back
+      'X-Accel-Buffering': 'no',
+    },
+  })
+}
+
 // Adds to the nucleus `nucleusId` the songs in whatever the user pasted: Spotify track links (one or many),
 // Deezer track or playlist links. Spotify playlists can't be read anymore (see SPOTIFY_PLAYLIST_HELP).
 //
-// Resumable: if the time budget runs out, the response carries `remaining` (links for the songs not
+// Validation problems come back as a JSON error; once songs start, the response is a stream of
+// events (see streamImport).
+//
+// Resumable: if the time budget runs out, the final event carries `remaining` (links for the songs not
 // tried yet). The client posts it back as `input` with the running totals in `alreadyAdded` and
-// `alreadyAttempted`, so the 25-song / 40-attempt limits apply to the whole import, not each request.
+// `alreadyAttempted`, so the 30-song / 45-attempt limits apply to the whole import, not each request.
 export const Route = createFileRoute('/api/tracks/import')({
   server: {
     handlers: {
@@ -45,7 +177,16 @@ export const Route = createFileRoute('/api/tracks/import')({
           const body = await request.json()
           const ctx = await requireNucleus(await requireUser(request), body.nucleusId)
           const input = typeof body.input === 'string' ? body.input.slice(0, MAX_INPUT_LENGTH) : ''
-          const targetSuccess = Math.max(0, TARGET_SUCCESS - clampCount(body.alreadyAdded))
+          // Room left in this import, and in the nucleus
+          const roomInNucleus = MAX_TRACKS_PER_NUCLEUS - (await countNucleusTracks(ctx.db, ctx.nucleus.id))
+          if (roomInNucleus <= 0) {
+            throw new HttpError(
+              422,
+              `This nucleus is full (${MAX_TRACKS_PER_NUCLEUS} songs). Remove some, or start a new nucleus for these.`,
+              { code: 'nucleus_full' },
+            )
+          }
+          const targetSuccess = Math.max(0, Math.min(TARGET_SUCCESS - clampCount(body.alreadyAdded), roomInNucleus))
           const maxAttempts = Math.max(0, MAX_ATTEMPTS - clampCount(body.alreadyAttempted))
           const startedAt = Date.now()
 
@@ -72,10 +213,10 @@ export const Route = createFileRoute('/api/tracks/import')({
 
           const jobs: ImportJob[] = []
           for (const id of parsed.spotifyTrackIds) {
-            jobs.push({ label: `Spotify track ${id}`, link: `https://open.spotify.com/track/${id}`, run: () => addSpotifyTrack(ctx, id) })
+            jobs.push({ label: `Spotify track ${id}`, link: `https://open.spotify.com/track/${id}`, run: (p) => addSpotifyTrack(ctx, id, p) })
           }
           for (const id of new Set(parsed.deezerTrackIds)) {
-            jobs.push({ label: `Deezer track ${id}`, link: `https://www.deezer.com/track/${id}`, run: () => addDeezerTrack(ctx, id) })
+            jobs.push({ label: `Deezer track ${id}`, link: `https://www.deezer.com/track/${id}`, run: (p) => addDeezerTrack(ctx, id, p) })
           }
           for (const playlistId of new Set(parsed.deezerPlaylistIds)) {
             let playlistTracks: DeezerTrack[]
@@ -89,7 +230,7 @@ export const Route = createFileRoute('/api/tracks/import')({
               jobs.push({
                 label: `${track.title} - ${track.artist?.name ?? ''}`,
                 link: `https://www.deezer.com/track/${track.id}`,
-                run: () => addDeezerTrack(ctx, track),
+                run: (p) => addDeezerTrack(ctx, track, p),
               })
             }
           }
@@ -103,80 +244,8 @@ export const Route = createFileRoute('/api/tracks/import')({
             maxAttempts,
           })
 
-          // AI problems that would make every remaining new song fail the same way
-          const STOP_CODES = new Set(['ai_not_connected', 'ai_rate_limited', 'ai_data_policy', 'ai_payment_required'])
-          let stopError: HttpError | null = null
-
-          const success: Track[] = []
-          const skipped: Array<{ track: string; artist: string; reason: string }> = []
-          const failed: Array<{ track: string; artist: string; reason: string; debug?: Record<string, unknown> }> = []
-
-          // Sequential on purpose: keeps us inside LRCLIB, Deezer and OpenRouter's free-model rate limits,
-          // and lets the client show tracks appearing one by one while it polls.
-          const allowed = jobs.slice(0, maxAttempts)
-          let attempted = 0
-          let remaining: ImportJob[] = []
-          for (const [index, job] of allowed.entries()) {
-            if (success.length >= targetSuccess) break
-            // Always try at least one song per request, so every chunk makes progress
-            if (attempted > 0 && Date.now() - startedAt > TIME_BUDGET_MS) {
-              remaining = allowed.slice(index)
-              break
-            }
-            attempted++
-            try {
-              const result = await job.run()
-              if (result.status === 'added') {
-                success.push(result.track)
-              } else {
-                skipped.push({ track: result.track.title, artist: result.track.artist, reason: 'Already in collection' })
-              }
-            } catch (error) {
-              const code = error instanceof HttpError ? error.body?.code : undefined
-              if (typeof code === 'string' && STOP_CODES.has(code) && !stopError) {
-                // Songs already in the catalog don't need AI, so keep going but only for those:
-                // from now on, songs that need analysis fail right away instead of retrying the AI
-                // (failed requests also count toward OpenRouter's free daily limit)
-                const blocked = error as HttpError
-                stopError = blocked
-                ctx.getAiKey = () => Promise.reject(blocked)
-              }
-              if (!(error instanceof HttpError)) console.error(`Error importing ${job.label}:`, error)
-              failed.push({
-                track: job.label,
-                artist: '',
-                reason: error instanceof HttpError ? error.message : 'Could not analyze this track',
-                ...(process.env.NODE_ENV !== 'production' && error instanceof HttpError && error.body ? { debug: error.body } : {}),
-              })
-            }
-          }
-
-          // If the AI stopped working, the next request would just hit the same error (and spend
-          // another of the user's free daily requests), so don't hand anything back
-          const remainingInput = stopError ? null : remaining.map((job) => job.link).join('\n') || null
-
-          log.info('import', remainingInput ? 'import chunk finished' : 'import finished', {
-            added: success.length,
-            remaining: remainingInput ? remaining.length : 0,
-            seconds: Math.round((Date.now() - startedAt) / 1000),
-            skipped: skipped.length,
-            failed: failed.length,
-            failureReasons: failed.map((f) => f.debug?.reason ?? f.reason),
-          })
-
-          return json({
-            totalProcessed: success.length + skipped.length + failed.length,
-            successCount: success.length,
-            skippedCount: skipped.length,
-            failedCount: failed.length,
-            tracks: success,
-            skipped,
-            failed,
-            notice: stopError?.message ?? (parsed.spotifyPlaylistIds.length > 0 ? SPOTIFY_PLAYLIST_HELP : undefined),
-            aiError: stopError?.body?.code,
-            attempted,
-            remaining: remainingInput,
-          })
+          const notice = parsed.spotifyPlaylistIds.length > 0 ? SPOTIFY_PLAYLIST_HELP : undefined
+          return streamImport(ctx, jobs.slice(0, maxAttempts), { targetSuccess, startedAt, notice })
         } catch (error) {
           return errorResponse(error, 'Error importing tracks')
         }

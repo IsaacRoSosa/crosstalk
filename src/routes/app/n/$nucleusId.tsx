@@ -13,7 +13,7 @@ import { MAX_NUCLEI } from '../../../types/nucleus'
 import { apiFetch } from '../../../lib/api-client'
 import { saveWithGoogle } from '../../../lib/auth'
 import { isEmptyImport, parseImportInput } from '../../../lib/import-input'
-import { importSongs } from '../../../lib/import-client'
+import { importSongs, type ImportProgress } from '../../../lib/import-client'
 import {
   ApiError,
   autoNameNucleus,
@@ -95,10 +95,12 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
   // Bumped when the server says the AI isn't connected, so the panel re-checks and stands out
   const [aiPanelRefresh, setAiPanelRefresh] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  // Live progress while songs are added: which one is being read and how many are done
   const [playlistProgress, setPlaylistProgress] = useState<{
-    current: number
+    processed: number
     total: number
-    isProcessing: boolean
+    song: string | null
+    stage: string | null
   } | null>(null)
   const [nucleusName, setNucleusName] = useState('The Nucleus')
   const [isChatOpen, setIsChatOpen] = useState(false)
@@ -556,29 +558,34 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
     setError(null)
     setPlaylistProgress(null)
 
-    // While a batch imports, refresh the list so tracks appear in orbit one by one
-    let pollInterval: ReturnType<typeof setInterval> | null = null
-    if (isBatch) {
-      const expected = parsed.deezerPlaylistIds.length > 0 || parsed.deezerShortLinks.length > 0 ? 25 : Math.min(songCount, 25)
-      setPlaylistProgress({ current: 0, total: expected, isProcessing: true })
-      pollInterval = setInterval(async () => {
-        try {
-          const data = await listTracks(nucleusId)
-          if (data.tracks) {
-            setTracks(data.tracks)
-            const added = data.tracks.length - previousCount
-            if (added > 0) {
-              setPlaylistProgress(prev => (prev ? { ...prev, current: Math.min(added, prev.total) } : null))
-            }
-          }
-        } catch (err) {
-          console.error('Failed to poll tracks:', err)
-        }
-      }, 2000)
+    // Follow the import song by song; added songs enter orbit right away
+    setPlaylistProgress({ processed: 0, total: Math.max(1, songCount), song: null, stage: null })
+    const onProgress = (progress: ImportProgress) => {
+      switch (progress.type) {
+        case 'start':
+          setPlaylistProgress((prev) => prev && { ...prev, total: Math.max(1, progress.total) })
+          break
+        case 'song':
+          setPlaylistProgress((prev) =>
+            prev && { ...prev, song: `${progress.title} · ${progress.artist}`, stage: progress.cached ? 'already read' : 'looking up' },
+          )
+          break
+        case 'stage':
+          setPlaylistProgress((prev) => prev && { ...prev, stage: progress.stage === 'lyrics' ? 'finding lyrics' : 'reading the mood' })
+          break
+        case 'added':
+          setTracks((prev) => [progress.track, ...prev.filter((t) => t.id !== progress.track.id)])
+          setPlaylistProgress((prev) => prev && { ...prev, processed: prev.processed + 1 })
+          break
+        case 'skipped':
+        case 'failed':
+          setPlaylistProgress((prev) => prev && { ...prev, processed: prev.processed + 1 })
+          break
+      }
     }
 
     try {
-      const data = await importSongs(nucleusId, input)
+      const data = await importSongs(nucleusId, input, onProgress)
 
       await loadTracks()
       setImportInput('')
@@ -605,7 +612,6 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unknown error')
     } finally {
-      if (pollInterval) clearInterval(pollInterval)
       setIsAnalyzing(false)
       setPlaylistProgress(null)
     }
@@ -874,18 +880,23 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
               </button>
             </div>
             <p className="mt-1 text-[11px] leading-snug text-white/40 font-mono">
-              Tip: in the Spotify desktop app, select songs and copy them (Cmd/Ctrl+C) to paste many at once.
+              Tip: in the Spotify desktop app, open On Repeat (or any playlist), select all (Cmd/Ctrl+A) and copy (Cmd/Ctrl+C) to paste up to 30 at once.
             </p>
-            {playlistProgress && playlistProgress.isProcessing && (
-              <div className="mt-2 border border-white/30 bg-black/50 p-2">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-white text-xs font-mono">Adding songs...</span>
-                  <span className="text-white text-xs font-mono">{playlistProgress.current}/{playlistProgress.total}</span>
+            {playlistProgress && (
+              <div className="mt-2 border border-white/30 bg-black/50 p-2 font-mono">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-white text-xs truncate">{playlistProgress.song ?? 'Finding your songs...'}</span>
+                  <span className="text-white/60 text-xs shrink-0">
+                    {playlistProgress.processed}/{playlistProgress.total}
+                  </span>
                 </div>
+                {playlistProgress.stage && (
+                  <div className="mb-1.5 text-[10px] uppercase tracking-[0.15em] text-white/40">{playlistProgress.stage}</div>
+                )}
                 <div className="w-full h-1 bg-white/20 overflow-hidden">
                   <div
                     className="h-full bg-white transition-all duration-300"
-                    style={{ width: `${(playlistProgress.current / playlistProgress.total) * 100}%` }}
+                    style={{ width: `${(playlistProgress.processed / playlistProgress.total) * 100}%` }}
                   />
                 </div>
               </div>

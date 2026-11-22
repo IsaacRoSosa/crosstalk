@@ -244,6 +244,15 @@ export async function addTracksToNucleus(db: Db, nucleusId: number, trackIds: nu
   return data.length
 }
 
+export async function countNucleusTracks(db: Db, nucleusId: number): Promise<number> {
+  const { count, error } = await db
+    .from('nucleus_tracks')
+    .select('track_id', { count: 'exact', head: true })
+    .eq('nucleus_id', nucleusId)
+  if (error) throw error
+  return count ?? 0
+}
+
 // Whether the track is in any of the signed-in user's nuclei
 export async function isTrackInOwnNuclei(db: Db, trackId: number): Promise<boolean> {
   const { count, error } = await db
