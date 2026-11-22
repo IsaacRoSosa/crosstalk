@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Music, Sparkles, Plus, Trash2, ChevronDown, ChevronUp, Pause, Play, Volume2, X, PanelRightOpen, PanelRightClose, ArrowLeft, Orbit, List } from 'lucide-react'
+import { Music, Sparkles, Plus, Trash2, ChevronDown, ChevronUp, Pause, Play, Volume2, X, PanelRightOpen, PanelRightClose, ArrowLeft, Orbit, List, SkipBack, SkipForward, Shuffle } from 'lucide-react'
 import { NucleusVisualization } from '../../../components/NucleusVisualization'
 import type { NucleusVisualizationHandle } from '../../../components/NucleusVisualization'
 import { NucleusChat } from '../../../components/NucleusChat'
@@ -134,6 +134,21 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
   const ytApiReady = useRef(false)
   const ytApiCallbacks = useRef<(() => void)[]>([])
 
+  // Play queue: playing a song continues through the rest of the list it was started from
+  const queueRef = useRef<Track[]>([])
+  // Galaxy order (newest first), for queues started from the galaxy
+  const sortedTracksRef = useRef<Track[]>([])
+  const queueOrderRef = useRef<Track[]>([])
+  const queueIndexRef = useRef(0)
+  const [queueInfo, setQueueInfo] = useState<{ index: number; length: number } | null>(null)
+  const [shuffle, setShuffle] = useState(false)
+  const shuffleRef = useRef(false)
+  // Called when a song ends or can't be played; set below once the queue functions exist
+  const advanceRef = useRef<(() => void) | null>(null)
+  // Consecutive songs skipped because no playable video was found, to stop instead of looping forever
+  const skippedInARow = useRef(0)
+  const stopPlaybackRef = useRef<() => void>(() => {})
+
   // Load YouTube IFrame API
   useEffect(() => {
     const markReady = () => {
@@ -233,9 +248,15 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
             setIsPlaying(false)
             if (seekIntervalRef.current) clearInterval(seekIntervalRef.current)
           } else if (event.data === window.YT.PlayerState.ENDED) {
-            // Loop: replay
-            event.target.playVideo()
+            skippedInARow.current = 0
+            if (advanceRef.current) advanceRef.current()
+            else event.target.playVideo()
           }
+        },
+        // e.g. the video can't be embedded: move on to the next song
+        onError: () => {
+          skippedInARow.current++
+          advanceRef.current?.()
         },
       },
     })
@@ -244,8 +265,11 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
     setPlayingTrack(track)
   }, [])
 
-  const playTrack = useCallback(async (track: Track) => {
+  // 'missing' means YouTube has no video for it (a queue skips it); 'error' means lookups are failing
+  // altogether, e.g. the daily YouTube quota is used up (a queue stops)
+  const playTrack = useCallback(async (track: Track): Promise<'playing' | 'missing' | 'error'> => {
     setIsLoadingVideo(true)
+    setPlayingTrack(track)
 
     let videoId: string | null
     try {
@@ -253,12 +277,12 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
     } catch (err) {
       setIsLoadingVideo(false)
       setError(err instanceof Error ? err.message : 'Could not play this track')
-      return
+      return 'error'
     }
     if (!videoId) {
       setIsLoadingVideo(false)
-      setError('Could not find this track on YouTube')
-      return
+      setError(`Couldn't find ${track.title} on YouTube`)
+      return 'missing'
     }
 
     const doCreate = () => createYTPlayer(videoId, track)
@@ -268,7 +292,72 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
     } else {
       ytApiCallbacks.current.push(doCreate)
     }
+    return 'playing'
   }, [searchYouTubeVideo, createYTPlayer])
+
+  const playAt = useCallback(
+    async (index: number) => {
+      const queue = queueRef.current
+      if (index < 0 || index >= queue.length) return
+      queueIndexRef.current = index
+      setQueueInfo({ index, length: queue.length })
+      const outcome = await playTrack(queue[index])
+      if (outcome === 'missing' && skippedInARow.current < 3 && index + 1 < queue.length) {
+        skippedInARow.current++
+        playAt(index + 1)
+      } else if (outcome !== 'playing') {
+        stopPlaybackRef.current()
+      }
+    },
+    [playTrack],
+  )
+
+  const shuffled = (list: Track[]) => {
+    const copy = [...list]
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[copy[i], copy[j]] = [copy[j], copy[i]]
+    }
+    return copy
+  }
+
+  // Plays `list` starting at `startIndex`, then carries on through the rest of it
+  const playQueue = useCallback(
+    (list: Track[], startIndex: number) => {
+      if (!list[startIndex]) return
+      queueOrderRef.current = list
+      const first = list[startIndex]
+      queueRef.current = shuffleRef.current ? [first, ...shuffled(list.filter((t) => t.id !== first.id))] : list
+      skippedInARow.current = 0
+      playAt(shuffleRef.current ? 0 : startIndex)
+    },
+    [playAt],
+  )
+
+  const skip = useCallback(
+    (delta: number) => {
+      const next = queueIndexRef.current + delta
+      if (next >= 0 && next < queueRef.current.length) playAt(next)
+    },
+    [playAt],
+  )
+
+  // Shuffling keeps the current song and reorders what's left; turning it off goes back to list order
+  const toggleShuffle = () => {
+    const on = !shuffleRef.current
+    shuffleRef.current = on
+    setShuffle(on)
+    const queue = queueRef.current
+    if (queue.length === 0) return
+    const current = queue[queueIndexRef.current]
+    if (on) {
+      queueRef.current = [...queue.slice(0, queueIndexRef.current + 1), ...shuffled(queue.slice(queueIndexRef.current + 1))]
+    } else {
+      queueRef.current = queueOrderRef.current
+      queueIndexRef.current = Math.max(0, queueOrderRef.current.findIndex((t) => t.id === current?.id))
+    }
+    setQueueInfo({ index: queueIndexRef.current, length: queueRef.current.length })
+  }
 
   const togglePlayback = useCallback(() => {
     if (!ytPlayerRef.current) return
@@ -282,6 +371,8 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
   }, [isPlaying])
 
   const stopPlayback = useCallback(() => {
+    queueRef.current = []
+    setQueueInfo(null)
     if (seekIntervalRef.current) clearInterval(seekIntervalRef.current)
     if (ytPlayerRef.current) {
       ytPlayerRef.current.destroy()
@@ -293,13 +384,20 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
     setSeekDuration(0)
   }, [])
 
+  stopPlaybackRef.current = stopPlayback
+  // The end of the queue stops playback
+  advanceRef.current = () => {
+    if (queueIndexRef.current + 1 < queueRef.current.length && skippedInARow.current < 3) skip(1)
+    else stopPlayback()
+  }
+
   const confirmTrackChange = useCallback(() => {
     if (selectedTrack) {
-      playTrack(selectedTrack)
+      playQueue(sortedTracksRef.current, Math.max(0, sortedTracksRef.current.findIndex((t) => t.id === selectedTrack.id)))
       setShowSwitchConfirm(false)
       // Keep modal open - don't close it
     }
-  }, [selectedTrack, playTrack])
+  }, [selectedTrack, playQueue])
 
   const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value)
@@ -673,8 +771,8 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
 
     // Handle audio playback
     if (!playingTrack) {
-      // Nothing playing - start playing this track
-      playTrack(track)
+      // Nothing playing - start here and carry on through the nucleus
+      playQueue(sortedTracks, Math.max(0, sortedTracks.findIndex((t) => t.id === track.id)))
     } else if (playingTrack.id === track.id) {
       // Same track already playing - just show modal, don't toggle playback
       // User can use the player controls if they want to pause
@@ -690,6 +788,7 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
       new Date(b.added_at).getTime() - new Date(a.added_at).getTime()
     )
   }, [tracks])
+  sortedTracksRef.current = sortedTracks
 
   // Distribute tracks across orbits (newest = inner, oldest = outer)
   const tracksByOrbit = useMemo(() => {
@@ -805,6 +904,14 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
             </button>
           ))}
         </div>
+        {view === 'galaxy' && tracks.length > 0 && !playingTrack && !isLoadingVideo && (
+          <button
+            onClick={() => playQueue(sortedTracks, 0)}
+            className="pointer-events-auto flex h-8 items-center gap-1.5 border border-white/30 bg-black/80 px-2.5 text-[10px] uppercase tracking-[0.15em] text-white/60 hover:border-white/60 hover:text-white"
+          >
+            <Play className="h-3.5 w-3.5" /> play all
+          </button>
+        )}
         <button
           onClick={toggleChat}
           aria-pressed={isChatOpen}
@@ -850,7 +957,7 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
               canCreateNucleus={canCreateNucleus}
               playingTrackId={playingTrack?.id ?? null}
               isPlaying={isPlaying}
-              onPlay={playTrack}
+              onPlay={playQueue}
               onTogglePlayback={togglePlayback}
               onRemove={handleRemoveTracks}
               onTransfer={handleTransfer}
@@ -1317,6 +1424,14 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
           {/* Controls row */}
           <div className="px-4 py-2 flex items-center gap-4">
             <button
+              onClick={() => skip(-1)}
+              disabled={!queueInfo || queueInfo.index === 0}
+              className="w-7 h-7 flex items-center justify-center text-white/60 hover:text-white disabled:opacity-25"
+              aria-label="Previous song"
+            >
+              <SkipBack className="w-3.5 h-3.5" />
+            </button>
+            <button
               onClick={togglePlayback}
               disabled={isLoadingVideo}
               className="w-8 h-8 flex items-center justify-center text-white hover:text-white/80 transition-colors border border-white/30 disabled:opacity-40"
@@ -1329,14 +1444,36 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
                 <Play className="w-4 h-4" />
               )}
             </button>
+            <button
+              onClick={() => skip(1)}
+              disabled={!queueInfo || queueInfo.index + 1 >= queueInfo.length}
+              className="w-7 h-7 flex items-center justify-center text-white/60 hover:text-white disabled:opacity-25"
+              aria-label="Next song"
+            >
+              <SkipForward className="w-3.5 h-3.5" />
+            </button>
             <div className="flex-1 min-w-0">
               <p className="text-sm text-white truncate">
-                {isLoadingVideo ? 'Searching YouTube...' : playingTrack?.title}
+                {playingTrack?.title ?? 'Searching YouTube...'}
               </p>
               <p className="text-xs text-white/50 truncate">
-                {isLoadingVideo ? '' : playingTrack?.artist}
+                {isLoadingVideo ? 'finding it on youtube...' : playingTrack?.artist}
               </p>
             </div>
+            {queueInfo && queueInfo.length > 1 && (
+              <span className="text-[10px] text-white/40 tabular-nums shrink-0">
+                {queueInfo.index + 1} / {queueInfo.length}
+              </span>
+            )}
+            <button
+              onClick={toggleShuffle}
+              aria-pressed={shuffle}
+              className={`w-7 h-7 flex items-center justify-center transition-colors ${shuffle ? 'text-white' : 'text-white/35 hover:text-white/70'}`}
+              aria-label={shuffle ? 'Shuffle on' : 'Shuffle off'}
+              title="Shuffle"
+            >
+              <Shuffle className="w-3.5 h-3.5" />
+            </button>
             {isPlaying && <Volume2 className="w-4 h-4 text-white/40" />}
             <button
               onClick={stopPlayback}

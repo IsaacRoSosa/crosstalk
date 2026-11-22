@@ -21,7 +21,8 @@ interface TrackListViewProps {
   canCreateNucleus: boolean
   playingTrackId: number | null
   isPlaying: boolean
-  onPlay: (track: Track) => void
+  // Plays `list` from `index` on, as a queue (the list as currently filtered and sorted)
+  onPlay: (list: Track[], index: number) => void
   onTogglePlayback: () => void
   onRemove: (trackIds: number[]) => Promise<void>
   // Resolves with a short message to show, e.g. "moved 4 songs to night drive"
@@ -242,6 +243,14 @@ export function TrackListView({
 
       {/* Selection actions */}
       <div className="sticky top-0 z-10 flex min-h-[44px] flex-wrap items-center gap-2 border-b border-white/15 bg-black py-2 text-[11px]">
+        {selected.size === 0 && visible.length > 0 && (
+          <button
+            onClick={() => onPlay(visible, 0)}
+            className="flex items-center gap-1.5 border border-white/30 px-2.5 py-1 uppercase tracking-[0.12em] hover:border-white"
+          >
+            <Play className="h-3 w-3" /> play {visible.length === tracks.length ? 'all' : 'these'}
+          </button>
+        )}
         {selected.size === 0 ? (
           <span className="text-white/40">
             {visible.length === tracks.length ? songs(tracks.length) : `${visible.length} of ${songs(tracks.length)}`} · select songs to remove or
@@ -443,7 +452,7 @@ export function TrackListView({
                 </span>
                 <span className="hidden w-20 text-[11px] text-white/40 lg:block">{formatAdded(track.added_at)}</span>
                 <button
-                  onClick={() => (isCurrent ? onTogglePlayback() : onPlay(track))}
+                  onClick={() => (isCurrent ? onTogglePlayback() : onPlay(visible, index))}
                   className={`flex h-7 w-8 shrink-0 items-center justify-center border transition-colors ${
                     isCurrent ? 'border-white text-white' : 'border-white/20 text-white/50 hover:border-white hover:text-white'
                   }`}
