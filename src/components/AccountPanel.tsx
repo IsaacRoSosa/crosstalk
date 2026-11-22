@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getSupabaseBrowserClient } from '../lib/supabase/client'
 import { saveWithGoogle, signOut, toAccountInfo, type AccountInfo } from '../lib/auth'
+import { GUEST_RETENTION_DAYS } from '../types/nucleus'
 
 // Who is signed in: a guest (anonymous session) with a "Save with Google" button, or their Google account
 export function AccountPanel() {
@@ -34,7 +35,8 @@ export function AccountPanel() {
       {account.isAnonymous ? (
         <>
           <p className="text-white/70 mb-2">
-            You're a guest: your galaxy is only saved in this browser. Save it with Google to keep it and use it on other devices.
+            You're a guest: your nucleus lives in this browser, and it's deleted after {GUEST_RETENTION_DAYS} days without a visit.
+            Save it with Google to keep it and use it on other devices.
           </p>
           <button
             onClick={() => run(saveWithGoogle)}

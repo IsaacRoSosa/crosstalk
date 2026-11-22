@@ -4,6 +4,10 @@ import type { Emotion } from './track'
 // The database enforces the same limits (see the limit_nuclei_per_user migrations).
 export const MAX_NUCLEI = 20
 
+// Guests' accounts are deleted after this many days without a visit (a nightly job in the
+// database, see the delete_inactive_guests migration)
+export const GUEST_RETENTION_DAYS = 30
+
 // Songs added per import: On Repeat has 30, so it fits whole
 export const MAX_SONGS_PER_IMPORT = 30
 

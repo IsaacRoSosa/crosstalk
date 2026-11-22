@@ -6,7 +6,7 @@ import { getSupabaseBrowserClient } from '../../lib/supabase/client'
 import { saveWithGoogle, signOut, toAccountInfo, type AccountInfo } from '../../lib/auth'
 import { ApiError, deleteNucleus, listNuclei, renameNucleus, type NucleusLibrary } from '../../lib/nuclei-client'
 import { EMOTIONS, type Emotion } from '../../types/track'
-import type { NucleusSummary } from '../../types/nucleus'
+import { GUEST_RETENTION_DAYS, type NucleusSummary } from '../../types/nucleus'
 
 export const Route = createFileRoute('/app/')({
   component: Library,
@@ -54,7 +54,7 @@ function Library() {
           </h1>
           <p className="mt-3 text-xs leading-relaxed text-white/50">
             {library?.isAnonymous
-              ? 'Each nucleus is one collection of songs, read for mood. Save with Google to keep yours and make more, one per playlist or mood.'
+              ? `Each nucleus is one collection of songs, read for mood. As a guest, yours lives in this browser and is deleted after ${GUEST_RETENTION_DAYS} days without a visit. Save with Google to keep it and make more, one per playlist or mood.`
               : 'Each nucleus is one collection of songs, read for mood. Make one per playlist or mood, and move songs between them from the list view.'}
           </p>
         </div>
