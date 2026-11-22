@@ -113,7 +113,7 @@ function Privacy() {
               Don't put anything in the chat you wouldn't want a model provider to read.
             </Item>
             <Item name="lyrics and music catalogs">
-              LRCLIB, Genius, Deezer and Spotify get a song's title, artist or id to find its lyrics, details and genre. They
+              LRCLIB, Genius, Deezer, Spotify and Apple Music get a song's title, artist or id to find its lyrics, details and genre. They
               don't learn who you are: these requests come from our server.
             </Item>
             <Item name="youtube">

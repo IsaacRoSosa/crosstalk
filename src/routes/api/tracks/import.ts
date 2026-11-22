@@ -3,7 +3,8 @@ import { errorResponse, HttpError } from '../../../lib/http'
 import { requireNucleus, requireUser, type NucleusContext } from '../../../lib/session'
 import { isEmptyImport, parseImportInput } from '../../../lib/import-input'
 import { fetchDeezerPlaylistTracks, resolveDeezerShortLink, type DeezerTrack } from '../../../lib/deezer'
-import { addDeezerTrack, addSpotifyTrack, type AddTrackResult, type OnProgress } from '../../../lib/track-pipeline'
+import { fetchAppleMusicPlaylistSongs, isAppleMusicConfigured, type AppleMusicSong } from '../../../lib/apple-music'
+import { addAppleMusicTrack, addDeezerTrack, addSpotifyTrack, type AddTrackResult, type OnProgress } from '../../../lib/track-pipeline'
 import { log } from '../../../lib/log'
 import type { Track } from '../../../types/track'
 import type { ImportEvent, ImportIssue } from '../../../types/import'
@@ -21,7 +22,10 @@ const MAX_INPUT_LENGTH = 50_000
 const TIME_BUDGET_MS = Number(process.env.IMPORT_TIME_BUDGET_MS) || 150_000
 
 const SPOTIFY_PLAYLIST_HELP =
-  "Spotify doesn't let apps read playlists anymore. Open the playlist in the Spotify desktop app, select the songs (Cmd/Ctrl+A), copy them (Cmd/Ctrl+C) and paste them here. Deezer playlist links also work."
+  "Spotify doesn't let apps read playlists anymore. Open the playlist in the Spotify desktop app, select the songs (Cmd/Ctrl+A), copy them (Cmd/Ctrl+C) and paste them here. Deezer and Apple Music playlist links also work."
+
+const APPLE_ALBUM_HELP =
+  'Whole albums aren\'t added. Share a song from the album instead (its link ends in ?i=...), or a playlist.'
 
 interface ImportJob {
   label: string
@@ -161,7 +165,7 @@ function streamImport(
 }
 
 // Adds to the nucleus `nucleusId` the songs in whatever the user pasted: Spotify track links (one or many),
-// Deezer track or playlist links. Spotify playlists can't be read anymore (see SPOTIFY_PLAYLIST_HELP).
+// Deezer track or playlist links, Apple Music song or public playlist links. Spotify playlists can't be read anymore (see SPOTIFY_PLAYLIST_HELP).
 //
 // Validation problems come back as a JSON error; once songs start, the response is a stream of
 // events (see streamImport).
@@ -202,13 +206,27 @@ export const Route = createFileRoute('/api/tracks/import')({
           }
 
           if (isEmptyImport(parsed)) {
-            throw new HttpError(400, 'Paste Spotify song links or a Deezer playlist link.')
+            throw new HttpError(400, 'Paste Spotify song links, or a Deezer or Apple Music playlist link.')
           }
 
+          const hasAppleLinks = parsed.appleMusicSongs.length > 0 || parsed.appleMusicPlaylists.length > 0
           const hasImportableLinks =
-            parsed.spotifyTrackIds.length > 0 || parsed.deezerTrackIds.length > 0 || parsed.deezerPlaylistIds.length > 0
+            parsed.spotifyTrackIds.length > 0 ||
+            parsed.deezerTrackIds.length > 0 ||
+            parsed.deezerPlaylistIds.length > 0 ||
+            hasAppleLinks
           if (!hasImportableLinks) {
-            throw new HttpError(422, parsed.spotifyPlaylistIds.length > 0 ? SPOTIFY_PLAYLIST_HELP : 'No songs found in that link.')
+            throw new HttpError(
+              422,
+              parsed.spotifyPlaylistIds.length > 0
+                ? SPOTIFY_PLAYLIST_HELP
+                : parsed.appleMusicAlbumCount > 0
+                  ? APPLE_ALBUM_HELP
+                  : 'No songs found in that link.',
+            )
+          }
+          if (hasAppleLinks && !isAppleMusicConfigured()) {
+            throw new HttpError(503, "Apple Music links don't work here yet. Try Spotify or Deezer links.")
           }
 
           const jobs: ImportJob[] = []
@@ -235,16 +253,47 @@ export const Route = createFileRoute('/api/tracks/import')({
             }
           }
 
+          for (const ref of parsed.appleMusicSongs) {
+            jobs.push({
+              label: `Apple Music song ${ref.id}`,
+              link: `https://music.apple.com/${ref.storefront}/song/${ref.id}`,
+              run: (p) => addAppleMusicTrack(ctx, ref, p),
+            })
+          }
+          for (const ref of parsed.appleMusicPlaylists) {
+            let playlistSongs: AppleMusicSong[]
+            try {
+              playlistSongs = await fetchAppleMusicPlaylistSongs(ref.id, ref.storefront, Math.max(1, maxAttempts))
+            } catch (error) {
+              console.error(`Error fetching Apple Music playlist ${ref.id}:`, error)
+              throw new HttpError(502, "Couldn't read that Apple Music playlist. Make sure it's shared publicly.")
+            }
+            for (const song of playlistSongs) {
+              jobs.push({
+                label: `${song.title} - ${song.artist}`,
+                link: `https://music.apple.com/${ref.storefront}/song/${song.id}`,
+                run: (p) => addAppleMusicTrack(ctx, song, p),
+              })
+            }
+          }
+
           log.info('import', 'starting import', {
             spotifyTracks: parsed.spotifyTrackIds.length,
             deezerTracks: parsed.deezerTrackIds.length,
             deezerPlaylists: parsed.deezerPlaylistIds.length,
+            appleMusicSongs: parsed.appleMusicSongs.length,
+            appleMusicPlaylists: parsed.appleMusicPlaylists.length,
             jobs: jobs.length,
             targetSuccess,
             maxAttempts,
           })
 
-          const notice = parsed.spotifyPlaylistIds.length > 0 ? SPOTIFY_PLAYLIST_HELP : undefined
+          const notice =
+            parsed.spotifyPlaylistIds.length > 0
+              ? SPOTIFY_PLAYLIST_HELP
+              : parsed.appleMusicAlbumCount > 0
+                ? APPLE_ALBUM_HELP
+                : undefined
           return streamImport(ctx, jobs.slice(0, maxAttempts), { targetSuccess, startedAt, notice })
         } catch (error) {
           return errorResponse(error, 'Error importing tracks')

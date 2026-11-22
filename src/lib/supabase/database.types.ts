@@ -179,6 +179,7 @@ export type Database = {
         Row: {
           addressee: string | null
           analysis_version: number
+          apple_music_id: string | null
           secondary_emotion: string | null
           stance: string | null
           themes: string[] | null
@@ -206,6 +207,7 @@ export type Database = {
         Insert: {
           addressee?: string | null
           analysis_version?: number
+          apple_music_id?: string | null
           secondary_emotion?: string | null
           stance?: string | null
           themes?: string[] | null
@@ -233,6 +235,7 @@ export type Database = {
         Update: {
           addressee?: string | null
           analysis_version?: number
+          apple_music_id?: string | null
           secondary_emotion?: string | null
           stance?: string | null
           themes?: string[] | null

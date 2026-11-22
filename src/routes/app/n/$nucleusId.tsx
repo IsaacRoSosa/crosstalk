@@ -649,13 +649,17 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
 
     const parsed = parseImportInput(input)
     if (isEmptyImport(parsed)) {
-      setError('Paste Spotify song links or a Deezer playlist link.')
+      setError('Paste Spotify song links, or a Deezer or Apple Music playlist link.')
       return
     }
 
     // Single songs are added without the progress bar or a summary
-    const songCount = parsed.spotifyTrackIds.length + parsed.deezerTrackIds.length
-    const isBatch = songCount > 1 || parsed.deezerPlaylistIds.length > 0 || parsed.deezerShortLinks.length > 0
+    const songCount = parsed.spotifyTrackIds.length + parsed.deezerTrackIds.length + parsed.appleMusicSongs.length
+    const isBatch =
+      songCount > 1 ||
+      parsed.deezerPlaylistIds.length > 0 ||
+      parsed.deezerShortLinks.length > 0 ||
+      parsed.appleMusicPlaylists.length > 0
     const previousCount = tracks.length
 
     setIsAnalyzing(true)
@@ -1009,7 +1013,7 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
                 value={importInput}
                 onChange={e => setImportInput(e.target.value)}
                 onKeyPress={e => e.key === 'Enter' && addTrack()}
-                placeholder="Paste Spotify songs or a Deezer playlist..."
+                placeholder="Paste Spotify songs, or a Deezer or Apple Music playlist..."
                 className="flex-1 bg-black border border-white/30 px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-white font-mono"
                 disabled={isAnalyzing}
               />

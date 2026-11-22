@@ -1,16 +1,18 @@
 // Adds songs to a user's nucleus. Songs are analysed once and kept in the shared catalog, so a song
-// someone else already added (from Spotify or Deezer) is reused without calling Genius or the AI again.
+// someone else already added (from Spotify, Deezer or Apple Music) is reused without calling Genius or the AI again.
 
 import { HttpError } from './http'
 import { requireEnv } from './env'
 import { fetchSpotifyMetadata } from './spotify'
 import { fetchDeezerTrack, findDeezerGenre, type DeezerTrack } from './deezer'
+import { fetchAppleMusicSong, isAppleMusicConfigured, type AppleMusicSong } from './apple-music'
 import { findGeniusSongUrl } from './genius'
 import { findLyrics } from './lrclib'
 import { ANALYSIS_VERSION, analyzeLyrics } from './ai/analysis'
 import {
   addTrackToNucleus,
   findAnalyzedTrackByIsrc,
+  findTrackByAppleMusicId,
   findTrackByDeezerId,
   findTrackBySpotifyId,
   getNucleusTrackAddedAt,
@@ -38,6 +40,7 @@ export type OnProgress = (progress: PipelineProgress) => void
 interface TrackCandidate {
   spotify_id?: string
   deezer_id?: number
+  apple_music_id?: string
   isrc: string | null
   title: string
   artist: string
@@ -70,6 +73,18 @@ function fromDeezer(track: DeezerTrack): TrackCandidate {
   }
 }
 
+function fromAppleMusic(song: AppleMusicSong): TrackCandidate {
+  return {
+    apple_music_id: song.id,
+    isrc: song.isrc,
+    title: song.title,
+    artist: song.artist,
+    album: song.album,
+    cover_url: song.coverUrl,
+    duration_ms: song.durationMs,
+  }
+}
+
 function reportSong(row: TrackRow, cached: boolean, onProgress?: OnProgress) {
   onProgress?.({ stage: 'song', song: { title: row.title, artist: row.artist, cover_url: row.cover_url }, cached })
 }
@@ -78,6 +93,7 @@ function candidateFromRow(row: TrackRow): TrackCandidate {
   return {
     ...(row.spotify_id ? { spotify_id: row.spotify_id } : {}),
     ...(row.deezer_id ? { deezer_id: row.deezer_id } : {}),
+    ...(row.apple_music_id ? { apple_music_id: row.apple_music_id } : {}),
     isrc: row.isrc,
     title: row.title,
     artist: row.artist,
@@ -130,7 +146,12 @@ async function analyzeCandidate(
   const apiKey = await ctx.getAiKey()
 
   const label = `${candidate.title} - ${candidate.artist}`
-  log.info('pipeline', 'analyzing new track', { track: label, spotifyId: candidate.spotify_id, deezerId: candidate.deezer_id })
+  log.info('pipeline', 'analyzing new track', {
+    track: label,
+    spotifyId: candidate.spotify_id,
+    deezerId: candidate.deezer_id,
+    appleMusicId: candidate.apple_music_id,
+  })
 
   onProgress?.({ stage: 'lyrics' })
   const [lyricsResult, geniusUrl, deezerGenre] = await Promise.all([
@@ -213,6 +234,7 @@ async function addCandidate(
       const missingIds = {
         ...(candidate.spotify_id && !sameRecording.spotify_id ? { spotify_id: candidate.spotify_id } : {}),
         ...(candidate.deezer_id && !sameRecording.deezer_id ? { deezer_id: candidate.deezer_id } : {}),
+        ...(candidate.apple_music_id && !sameRecording.apple_music_id ? { apple_music_id: candidate.apple_music_id } : {}),
       }
       if (Object.keys(missingIds).length > 0) {
         await linkTrackSource(getAdminClient(), sameRecording.id, missingIds)
@@ -262,4 +284,32 @@ export async function addDeezerTrack(
     throw new HttpError(502, 'Could not get this track from Deezer')
   }
   return addCandidate(ctx, fromDeezer(full), known, onProgress)
+}
+
+// Accepts an Apple Music song id (with the storefront from its link), or a song from a playlist
+// listing, which already has everything the pipeline needs
+export async function addAppleMusicTrack(
+  ctx: NucleusContext,
+  song: { id: string; storefront?: string } | AppleMusicSong,
+  onProgress?: OnProgress,
+): Promise<AddTrackResult> {
+  const known = await findTrackByAppleMusicId(ctx.db, song.id)
+  if (known?.analyzed_at) {
+    return addFromCatalog(ctx, known, onProgress)
+  }
+  if ('title' in song) {
+    return addCandidate(ctx, fromAppleMusic(song), known, onProgress)
+  }
+  if (!isAppleMusicConfigured()) {
+    throw new HttpError(503, "Apple Music links don't work here yet.")
+  }
+
+  let full: AppleMusicSong
+  try {
+    full = await fetchAppleMusicSong(song.id, song.storefront)
+  } catch (error) {
+    console.error(`Error fetching Apple Music song ${song.id}:`, error)
+    throw new HttpError(502, 'Could not get this song from Apple Music')
+  }
+  return addCandidate(ctx, fromAppleMusic(full), known, onProgress)
 }

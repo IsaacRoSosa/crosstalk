@@ -36,6 +36,8 @@ export interface Track {
   id: number
   spotify_id: string | null
   deezer_id: number | null
+  // Optional so hand-made example tracks don't need it
+  apple_music_id?: string | null
   isrc: string | null
   title: string
   artist: string

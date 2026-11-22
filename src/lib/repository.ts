@@ -99,6 +99,7 @@ export function toTrack(row: TrackRow, addedAt: string): Track {
     id: row.id,
     spotify_id: row.spotify_id,
     deezer_id: row.deezer_id,
+    apple_music_id: row.apple_music_id,
     isrc: row.isrc,
     title: row.title,
     artist: row.artist,
@@ -154,7 +155,13 @@ export async function findTrackByDeezerId(db: Db, deezerId: number): Promise<Tra
   return data
 }
 
-// The same recording on Spotify and Deezer shares its ISRC, so this matches a song across sources
+export async function findTrackByAppleMusicId(db: Db, appleMusicId: string): Promise<TrackRow | null> {
+  const { data, error } = await db.from('tracks').select('*').eq('apple_music_id', appleMusicId).maybeSingle()
+  if (error) throw error
+  return data
+}
+
+// The same recording on Spotify, Deezer and Apple Music shares its ISRC, so this matches a song across sources
 export async function findAnalyzedTrackByIsrc(db: Db, isrc: string): Promise<TrackRow | null> {
   const { data, error } = await db
     .from('tracks')
@@ -181,7 +188,8 @@ export async function saveCatalogTrack(admin: Db, values: TrackInsert, existingI
   if (error.code === UNIQUE_VIOLATION) {
     const existing =
       (values.spotify_id ? await findTrackBySpotifyId(admin, values.spotify_id) : null) ??
-      (values.deezer_id ? await findTrackByDeezerId(admin, values.deezer_id) : null)
+      (values.deezer_id ? await findTrackByDeezerId(admin, values.deezer_id) : null) ??
+      (values.apple_music_id ? await findTrackByAppleMusicId(admin, values.apple_music_id) : null)
     if (existing) return existing
   }
   throw error
@@ -192,7 +200,7 @@ export async function saveCatalogTrack(admin: Db, values: TrackInsert, existingI
 export async function linkTrackSource(
   admin: Db,
   trackId: number,
-  ids: { spotify_id?: string; deezer_id?: number },
+  ids: { spotify_id?: string; deezer_id?: number; apple_music_id?: string },
 ): Promise<void> {
   const { error } = await admin.from('tracks').update(ids).eq('id', trackId)
   if (error && error.code !== UNIQUE_VIOLATION) throw error

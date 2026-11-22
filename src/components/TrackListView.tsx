@@ -492,6 +492,11 @@ export function TrackListView({
                         deezer
                       </a>
                     )}
+                    {track.apple_music_id && (
+                      <a href={`https://music.apple.com/us/song/${track.apple_music_id}`} target="_blank" rel="noopener noreferrer" className="underline hover:text-white">
+                        apple music
+                      </a>
+                    )}
                   </div>
                 </div>
               )}

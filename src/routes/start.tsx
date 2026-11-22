@@ -39,11 +39,11 @@ function setStepInUrl(step: Step) {
 }
 
 function countSongs(parsed: ParsedImportInput): number {
-  return parsed.spotifyTrackIds.length + parsed.deezerTrackIds.length
+  return parsed.spotifyTrackIds.length + parsed.deezerTrackIds.length + parsed.appleMusicSongs.length
 }
 
 function hasPlaylist(parsed: ParsedImportInput): boolean {
-  return parsed.deezerPlaylistIds.length > 0 || parsed.deezerShortLinks.length > 0
+  return parsed.deezerPlaylistIds.length > 0 || parsed.deezerShortLinks.length > 0 || parsed.appleMusicPlaylists.length > 0
 }
 
 // Onboarding: add your music → connect a free AI → watch the nucleus form
@@ -86,13 +86,19 @@ function MusicStep({ onContinue }: { onContinue: () => void }) {
 
   const parsed = useMemo(() => parseImportInput(input), [input])
   const songs = countSongs(parsed)
-  const playlists = parsed.deezerPlaylistIds.length + parsed.deezerShortLinks.length
+  const deezerPlaylists = parsed.deezerPlaylistIds.length + parsed.deezerShortLinks.length
+  const applePlaylists = parsed.appleMusicPlaylists.length
+  const playlists = deezerPlaylists + applePlaylists
   const onlySpotifyPlaylists = parsed.spotifyPlaylistIds.length > 0 && songs === 0 && playlists === 0
+  const onlyAppleAlbums = parsed.appleMusicAlbumCount > 0 && songs === 0 && playlists === 0
 
   const detected: string[] = []
   if (parsed.spotifyTrackIds.length) detected.push(`${parsed.spotifyTrackIds.length} spotify song${parsed.spotifyTrackIds.length === 1 ? '' : 's'}`)
   if (parsed.deezerTrackIds.length) detected.push(`${parsed.deezerTrackIds.length} deezer song${parsed.deezerTrackIds.length === 1 ? '' : 's'}`)
-  if (playlists) detected.push(`${playlists} deezer playlist${playlists === 1 ? '' : 's'}`)
+  if (deezerPlaylists) detected.push(`${deezerPlaylists} deezer playlist${deezerPlaylists === 1 ? '' : 's'}`)
+  if (parsed.appleMusicSongs.length)
+    detected.push(`${parsed.appleMusicSongs.length} apple music song${parsed.appleMusicSongs.length === 1 ? '' : 's'}`)
+  if (applePlaylists) detected.push(`${applePlaylists} apple music playlist${applePlaylists === 1 ? '' : 's'}`)
 
   const canContinue = (songs > 0 || playlists > 0) && !isEmptyImport(parsed)
 
@@ -148,14 +154,14 @@ function MusicStep({ onContinue }: { onContinue: () => void }) {
               detail="the same way from any playlist: select songs (cmd/ctrl+a) and copy them (cmd/ctrl+c)"
             />
             <SourceRow mark="D" name="deezer" detail="paste a link to a public playlist or a song" />
-            <SourceRow mark="A" name="apple music" detail="coming later" muted />
+            <SourceRow mark="A" name="apple music" detail="paste a link to a song or a playlist you've shared" />
           </div>
 
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             rows={6}
-            placeholder={'https://open.spotify.com/track/...\nhttps://open.spotify.com/track/...\nor https://www.deezer.com/playlist/...'}
+            placeholder={'https://open.spotify.com/track/...\nhttps://open.spotify.com/track/...\nor https://www.deezer.com/playlist/...\nor https://music.apple.com/.../playlist/...'}
             className="w-full resize-y border border-white/30 bg-black p-3 text-xs text-white placeholder-white/25 focus:border-white focus:outline-none"
             aria-label="Song or playlist links"
           />
@@ -163,11 +169,13 @@ function MusicStep({ onContinue }: { onContinue: () => void }) {
           <div className="min-h-[18px] text-[11px] text-white/60" aria-live="polite">
             {onlySpotifyPlaylists
               ? "spotify doesn't let apps read playlists. copy the songs from the playlist instead (see above)."
-              : detected.length > 0
-                ? `found ${detected.join(' · ')}${songs > MAX_SONGS_PER_IMPORT || playlists > 0 ? ` · the first ${MAX_SONGS_PER_IMPORT} with lyrics will be added` : ''}${parsed.spotifyPlaylistIds.length > 0 ? " · spotify playlist links are skipped (copy their songs instead)" : ''}`
-                : input.trim()
-                  ? "no spotify or deezer links found yet"
-                  : ''}
+              : onlyAppleAlbums
+                ? "whole albums aren't added. share a song from the album, or a playlist."
+                : detected.length > 0
+                  ? `found ${detected.join(' · ')}${songs > MAX_SONGS_PER_IMPORT || playlists > 0 ? ` · the first ${MAX_SONGS_PER_IMPORT} with lyrics will be added` : ''}${parsed.spotifyPlaylistIds.length > 0 ? " · spotify playlist links are skipped (copy their songs instead)" : ''}${parsed.appleMusicAlbumCount > 0 ? ' · album links are skipped (share a song from them)' : ''}`
+                  : input.trim()
+                    ? 'no spotify, deezer or apple music links found yet'
+                    : ''}
           </div>
         </div>
         <div className="flex items-center justify-between gap-3 border-t border-white/20 p-4">
