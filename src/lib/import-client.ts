@@ -24,7 +24,11 @@ export interface ImportResult {
 // More than enough for 40 songs; guards against looping forever if something goes wrong
 const MAX_CHUNKS = 12
 
-export async function importSongs(input: string, onChunk?: (soFar: ImportResult) => void): Promise<ImportResult> {
+export async function importSongs(
+  nucleusId: number,
+  input: string,
+  onChunk?: (soFar: ImportResult) => void,
+): Promise<ImportResult> {
   const total: ImportResult = { successCount: 0, skippedCount: 0, failedCount: 0, tracks: [], skipped: [], failed: [] }
   let attempted = 0
   let pending: string | null = input
@@ -34,7 +38,7 @@ export async function importSongs(input: string, onChunk?: (soFar: ImportResult)
     try {
       const response = await apiFetch('/api/tracks/import', {
         method: 'POST',
-        body: JSON.stringify({ input: pending, alreadyAdded: total.successCount, alreadyAttempted: attempted }),
+        body: JSON.stringify({ nucleusId, input: pending, alreadyAdded: total.successCount, alreadyAttempted: attempted }),
       })
       data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.error || 'Could not add your songs')

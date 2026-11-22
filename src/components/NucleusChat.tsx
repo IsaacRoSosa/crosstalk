@@ -4,13 +4,14 @@ import type { ChatMessage } from '../types/chat'
 import { apiFetch } from '../lib/api-client'
 
 interface NucleusChatProps {
+  nucleusId: number
   nucleusName: string
   isOpen: boolean
   onClose: () => void
   sidebarCollapsed?: boolean
 }
 
-export const NucleusChat = forwardRef<HTMLDivElement, NucleusChatProps>(function NucleusChat({ nucleusName, isOpen, onClose, sidebarCollapsed }, ref) {
+export const NucleusChat = forwardRef<HTMLDivElement, NucleusChatProps>(function NucleusChat({ nucleusId, nucleusName, isOpen, onClose, sidebarCollapsed }, ref) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -20,7 +21,7 @@ export const NucleusChat = forwardRef<HTMLDivElement, NucleusChatProps>(function
     if (isOpen) {
       loadMessages()
     }
-  }, [isOpen])
+  }, [isOpen, nucleusId])
 
   useEffect(() => {
     scrollToBottom()
@@ -32,7 +33,7 @@ export const NucleusChat = forwardRef<HTMLDivElement, NucleusChatProps>(function
 
   const loadMessages = async () => {
     try {
-      const response = await apiFetch('/api/chat')
+      const response = await apiFetch(`/api/chat?nucleus=${nucleusId}`)
       const data = await response.json()
       if (!response.ok) {
         throw new Error(data.error || 'Failed to load messages')
@@ -63,7 +64,7 @@ export const NucleusChat = forwardRef<HTMLDivElement, NucleusChatProps>(function
     try {
       const response = await apiFetch('/api/chat/message', {
         method: 'POST',
-        body: JSON.stringify({ message: userMessage }),
+        body: JSON.stringify({ nucleusId, message: userMessage }),
       })
 
       const data = await response.json()
@@ -102,7 +103,7 @@ export const NucleusChat = forwardRef<HTMLDivElement, NucleusChatProps>(function
 
   const resetConversation = async () => {
     try {
-      const response = await apiFetch('/api/chat', { method: 'DELETE' })
+      const response = await apiFetch('/api/chat', { method: 'DELETE', body: JSON.stringify({ nucleusId }) })
       if (!response.ok) {
         throw new Error('Failed to reset conversation')
       }

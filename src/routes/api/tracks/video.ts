@@ -2,11 +2,11 @@ import { createFileRoute } from '@tanstack/react-router'
 import { errorResponse, HttpError, json } from '../../../lib/http'
 import { requireEnv } from '../../../lib/env'
 import { requireUser } from '../../../lib/session'
-import { getCatalogTrack, getNucleusTrackAddedAt, setTrackVideo } from '../../../lib/repository'
+import { getCatalogTrack, isTrackInOwnNuclei, setTrackVideo } from '../../../lib/repository'
 import { getAdminClient } from '../../../lib/supabase/server'
 import { searchYouTubeVideoId } from '../../../lib/youtube'
 
-// Returns a YouTube video id to play a track in the user's nucleus.
+// Returns a YouTube video id to play a track in one of the user's nuclei.
 // The result is cached in the catalog, so each song costs at most one YouTube search.
 export const Route = createFileRoute('/api/tracks/video')({
   server: {
@@ -19,7 +19,7 @@ export const Route = createFileRoute('/api/tracks/video')({
             throw new HttpError(400, 'Invalid track id')
           }
 
-          const inNucleus = await getNucleusTrackAddedAt(ctx.db, ctx.nucleus.id, trackId)
+          const inNucleus = await isTrackInOwnNuclei(ctx.db, trackId)
           const track = inNucleus ? await getCatalogTrack(ctx.db, trackId) : null
           if (!track) {
             throw new HttpError(404, 'Track not found')

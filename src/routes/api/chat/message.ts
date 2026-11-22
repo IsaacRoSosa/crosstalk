@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { chatReply } from '../../../lib/ai/analysis'
 import { errorResponse, HttpError, json } from '../../../lib/http'
-import { requireUser } from '../../../lib/session'
+import { requireNucleus, requireUser } from '../../../lib/session'
 import { addMessages, listMessages, listNucleusTracks } from '../../../lib/repository'
 import { EMOTIONS, type Track } from '../../../types/track'
 
@@ -88,8 +88,8 @@ export const Route = createFileRoute('/api/chat/message')({
     handlers: {
       POST: async ({ request }) => {
         try {
-          const ctx = await requireUser(request)
           const body = await request.json()
+          const ctx = await requireNucleus(await requireUser(request), body.nucleusId)
           const message = typeof body.message === 'string' ? body.message.trim() : ''
           if (!message) {
             throw new HttpError(400, 'Message is required')

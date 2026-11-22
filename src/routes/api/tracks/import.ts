@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { errorResponse, HttpError, json } from '../../../lib/http'
-import { requireUser } from '../../../lib/session'
+import { requireNucleus, requireUser } from '../../../lib/session'
 import { isEmptyImport, parseImportInput } from '../../../lib/import-input'
 import { fetchDeezerPlaylistTracks, resolveDeezerShortLink, type DeezerTrack } from '../../../lib/deezer'
 import { addDeezerTrack, addSpotifyTrack, type AddTrackResult } from '../../../lib/track-pipeline'
@@ -31,7 +31,7 @@ function clampCount(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
 }
 
-// Adds the songs in whatever the user pasted: Spotify track links (one or many),
+// Adds to the nucleus `nucleusId` the songs in whatever the user pasted: Spotify track links (one or many),
 // Deezer track or playlist links. Spotify playlists can't be read anymore (see SPOTIFY_PLAYLIST_HELP).
 //
 // Resumable: if the time budget runs out, the response carries `remaining` (links for the songs not
@@ -42,8 +42,8 @@ export const Route = createFileRoute('/api/tracks/import')({
     handlers: {
       POST: async ({ request }) => {
         try {
-          const ctx = await requireUser(request)
           const body = await request.json()
+          const ctx = await requireNucleus(await requireUser(request), body.nucleusId)
           const input = typeof body.input === 'string' ? body.input.slice(0, MAX_INPUT_LENGTH) : ''
           const targetSuccess = Math.max(0, TARGET_SUCCESS - clampCount(body.alreadyAdded))
           const maxAttempts = Math.max(0, MAX_ATTEMPTS - clampCount(body.alreadyAttempted))

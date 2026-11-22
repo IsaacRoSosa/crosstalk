@@ -20,7 +20,7 @@ import {
 } from './repository'
 import { getAdminClient } from './supabase/server'
 import { log } from './log'
-import type { UserContext } from './session'
+import type { NucleusContext } from './session'
 import type { TrackRow } from './supabase/database.types'
 import type { SpotifyMetadata, Track } from '../types/track'
 
@@ -62,7 +62,7 @@ function fromDeezer(track: DeezerTrack): TrackCandidate {
   }
 }
 
-async function linkToNucleus(ctx: UserContext, row: TrackRow): Promise<AddTrackResult> {
+async function linkToNucleus(ctx: NucleusContext, row: TrackRow): Promise<AddTrackResult> {
   const existing = await getNucleusTrackAddedAt(ctx.db, ctx.nucleus.id, row.id)
   if (existing) {
     return { status: 'already_in_nucleus', track: toTrack(row, existing) }
@@ -71,7 +71,7 @@ async function linkToNucleus(ctx: UserContext, row: TrackRow): Promise<AddTrackR
   return { status: 'added', track: toTrack(row, addedAt) }
 }
 
-async function analyzeCandidate(ctx: UserContext, candidate: TrackCandidate, existingId?: number): Promise<TrackRow> {
+async function analyzeCandidate(ctx: NucleusContext, candidate: TrackCandidate, existingId?: number): Promise<TrackRow> {
   // Check the AI connection first, so songs aren't looked up for nothing when it's missing
   const apiKey = await ctx.getAiKey()
 
@@ -127,7 +127,7 @@ async function analyzeCandidate(ctx: UserContext, candidate: TrackCandidate, exi
 }
 
 // Reuses the catalog when possible (same source id, or same ISRC from the other source); analyses otherwise.
-async function addCandidate(ctx: UserContext, candidate: TrackCandidate, sameSourceRow: TrackRow | null): Promise<AddTrackResult> {
+async function addCandidate(ctx: NucleusContext, candidate: TrackCandidate, sameSourceRow: TrackRow | null): Promise<AddTrackResult> {
   if (sameSourceRow?.analyzed_at) {
     log.info('pipeline', 'reusing analyzed track', { trackId: sameSourceRow.id, match: 'source id' })
     return linkToNucleus(ctx, sameSourceRow)
@@ -152,7 +152,7 @@ async function addCandidate(ctx: UserContext, candidate: TrackCandidate, sameSou
   return linkToNucleus(ctx, row)
 }
 
-export async function addSpotifyTrack(ctx: UserContext, spotifyId: string): Promise<AddTrackResult> {
+export async function addSpotifyTrack(ctx: NucleusContext, spotifyId: string): Promise<AddTrackResult> {
   const known = await findTrackBySpotifyId(ctx.db, spotifyId)
   if (known?.analyzed_at) {
     return linkToNucleus(ctx, known)
@@ -169,7 +169,7 @@ export async function addSpotifyTrack(ctx: UserContext, spotifyId: string): Prom
 }
 
 // Accepts a Deezer track id, or a track object from a playlist listing (which lacks the ISRC)
-export async function addDeezerTrack(ctx: UserContext, track: number | DeezerTrack): Promise<AddTrackResult> {
+export async function addDeezerTrack(ctx: NucleusContext, track: number | DeezerTrack): Promise<AddTrackResult> {
   const deezerId = typeof track === 'number' ? track : track.id
   const known = await findTrackByDeezerId(ctx.db, deezerId)
   if (known?.analyzed_at) {

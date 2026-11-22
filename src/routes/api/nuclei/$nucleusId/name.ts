@@ -1,15 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { generateNucleusName } from '../../../lib/ai/analysis'
-import { errorResponse, HttpError, json } from '../../../lib/http'
-import { requireUser } from '../../../lib/session'
-import { listNucleusTracks, updateNucleus } from '../../../lib/repository'
+import { generateNucleusName } from '../../../../lib/ai/analysis'
+import { errorResponse, HttpError, json } from '../../../../lib/http'
+import { requireNucleus, requireUser } from '../../../../lib/session'
+import { listNucleusTracks, updateNucleus } from '../../../../lib/repository'
 
-export const Route = createFileRoute('/api/nucleus/rename')({
+// Lets the AI name a nucleus after its songs
+export const Route = createFileRoute('/api/nuclei/$nucleusId/name')({
   server: {
     handlers: {
-      POST: async ({ request }) => {
+      POST: async ({ request, params }) => {
         try {
-          const ctx = await requireUser(request)
+          const ctx = await requireNucleus(await requireUser(request), params.nucleusId)
 
           const apiKey = await ctx.getAiKey()
 

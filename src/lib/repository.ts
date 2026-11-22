@@ -2,7 +2,8 @@
 // Functions that take `db` run as the signed-in user (Row Level Security applies);
 // functions that take `admin` write the shared catalog and must only be called on the server.
 
-import { isEmotion, type Track } from '../types/track'
+import { isEmotion, type Emotion, type Track } from '../types/track'
+import { MAX_SUMMARY_COVERS, type NucleusSummary } from '../types/nucleus'
 import type { ChatMessage } from '../types/chat'
 import type { Db } from './supabase/server'
 import type { NucleusRow, TrackInsert, TrackRow } from './supabase/database.types'
@@ -13,24 +14,69 @@ const UNIQUE_VIOLATION = '23505'
 // Nuclei
 // ---------------------------------------------------------------------------
 
-export async function getOrCreateNucleus(db: Db, userId: string): Promise<NucleusRow> {
+// One of the signed-in user's nuclei, or null (Row Level Security hides everyone else's)
+export async function getNucleus(db: Db, nucleusId: number): Promise<NucleusRow | null> {
+  const { data, error } = await db.from('nuclei').select('*').eq('id', nucleusId).maybeSingle()
+  if (error) throw error
+  return data
+}
+
+// The user's nuclei, oldest first, with what the library needs to draw each one
+export async function listNucleusSummaries(db: Db): Promise<NucleusSummary[]> {
   const { data, error } = await db
     .from('nuclei')
-    .select('*')
+    .select('id, name, dominant_emotion, created_at, updated_at, nucleus_tracks(added_at, track:tracks(emotion, cover_url, analyzed_at))')
     .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
   if (error) throw error
-  if (data) return data
 
-  // Normally created by the on_auth_user_created trigger; this covers users created before it existed.
-  const { data: created, error: insertError } = await db
+  return data.map((row) => {
+    const links = (row.nucleus_tracks ?? [])
+      .flatMap((link) => {
+        const track = link.track as { emotion: string | null; cover_url: string | null; analyzed_at: string | null } | null
+        return track && track.analyzed_at ? [{ addedAt: link.added_at, ...track }] : []
+      })
+      .sort((a, b) => b.addedAt.localeCompare(a.addedAt))
+
+    const emotions: Partial<Record<Emotion, number>> = {}
+    for (const link of links) {
+      if (isEmotion(link.emotion)) emotions[link.emotion] = (emotions[link.emotion] ?? 0) + 1
+    }
+
+    return {
+      id: row.id,
+      name: row.name,
+      dominantEmotion: isEmotion(row.dominant_emotion) ? row.dominant_emotion : null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      trackCount: links.length,
+      emotions,
+      covers: links.flatMap((link) => (link.cover_url ? [link.cover_url] : [])).slice(0, MAX_SUMMARY_COVERS),
+      lastAddedAt: links[0]?.addedAt ?? null,
+    }
+  })
+}
+
+// Normally the sign-up trigger creates the first nucleus; this covers users created before it existed
+export async function ensureFirstNucleus(db: Db, userId: string): Promise<void> {
+  const { count, error } = await db.from('nuclei').select('id', { count: 'exact', head: true })
+  if (error) throw error
+  if (!count) await createNucleus(db, userId)
+}
+
+// Row Level Security refuses the insert past the per-account limit (1 for guests, MAX_NUCLEI otherwise)
+export async function createNucleus(db: Db, userId: string, name?: string): Promise<NucleusRow> {
+  const { data, error } = await db
     .from('nuclei')
-    .insert({ user_id: userId })
+    .insert({ user_id: userId, ...(name ? { name } : {}) })
     .select('*')
     .single()
-  if (insertError) throw insertError
-  return created
+  if (error) throw error
+  return data
+}
+
+export async function deleteNucleus(db: Db, nucleusId: number): Promise<void> {
+  const { error } = await db.from('nuclei').delete().eq('id', nucleusId)
+  if (error) throw error
 }
 
 export async function updateNucleus(
@@ -174,9 +220,38 @@ export async function addTrackToNucleus(db: Db, nucleusId: number, trackId: numb
   return data.added_at
 }
 
-export async function removeTrackFromNucleus(db: Db, nucleusId: number, trackId: number): Promise<void> {
-  const { error } = await db.from('nucleus_tracks').delete().eq('nucleus_id', nucleusId).eq('track_id', trackId)
+export async function removeTracksFromNucleus(db: Db, nucleusId: number, trackIds: number[]): Promise<number> {
+  const { data, error } = await db
+    .from('nucleus_tracks')
+    .delete()
+    .eq('nucleus_id', nucleusId)
+    .in('track_id', trackIds)
+    .select('track_id')
   if (error) throw error
+  return data.length
+}
+
+// Adds catalog tracks to a nucleus, skipping ones already in it. Returns how many were new.
+export async function addTracksToNucleus(db: Db, nucleusId: number, trackIds: number[]): Promise<number> {
+  const { data, error } = await db
+    .from('nucleus_tracks')
+    .upsert(
+      trackIds.map((trackId) => ({ nucleus_id: nucleusId, track_id: trackId })),
+      { onConflict: 'nucleus_id,track_id', ignoreDuplicates: true },
+    )
+    .select('track_id')
+  if (error) throw error
+  return data.length
+}
+
+// Whether the track is in any of the signed-in user's nuclei
+export async function isTrackInOwnNuclei(db: Db, trackId: number): Promise<boolean> {
+  const { count, error } = await db
+    .from('nucleus_tracks')
+    .select('track_id', { count: 'exact', head: true })
+    .eq('track_id', trackId)
+  if (error) throw error
+  return (count ?? 0) > 0
 }
 
 // ---------------------------------------------------------------------------
