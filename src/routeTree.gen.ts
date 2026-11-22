@@ -12,12 +12,11 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiTracksIndexRouteImport } from './routes/api/tracks/index'
 import { Route as ApiChatIndexRouteImport } from './routes/api/chat/index'
+import { Route as ApiTracksVideoRouteImport } from './routes/api/tracks/video'
 import { Route as ApiTracksAnalyzePlaylistRouteImport } from './routes/api/tracks/analyze-playlist'
 import { Route as ApiTracksAnalyzeRouteImport } from './routes/api/tracks/analyze'
 import { Route as ApiNucleusRenameRouteImport } from './routes/api/nucleus/rename'
-import { Route as ApiLyricsSearchRouteImport } from './routes/api/lyrics/search'
 import { Route as ApiChatMessageRouteImport } from './routes/api/chat/message'
-import { Route as ApiChatEmotionRouteImport } from './routes/api/chat/emotion'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -32,6 +31,11 @@ const ApiTracksIndexRoute = ApiTracksIndexRouteImport.update({
 const ApiChatIndexRoute = ApiChatIndexRouteImport.update({
   id: '/api/chat/',
   path: '/api/chat/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTracksVideoRoute = ApiTracksVideoRouteImport.update({
+  id: '/api/tracks/video',
+  path: '/api/tracks/video',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiTracksAnalyzePlaylistRoute =
@@ -50,53 +54,40 @@ const ApiNucleusRenameRoute = ApiNucleusRenameRouteImport.update({
   path: '/api/nucleus/rename',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiLyricsSearchRoute = ApiLyricsSearchRouteImport.update({
-  id: '/api/lyrics/search',
-  path: '/api/lyrics/search',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiChatMessageRoute = ApiChatMessageRouteImport.update({
   id: '/api/chat/message',
   path: '/api/chat/message',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiChatEmotionRoute = ApiChatEmotionRouteImport.update({
-  id: '/api/chat/emotion',
-  path: '/api/chat/emotion',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/api/chat/emotion': typeof ApiChatEmotionRoute
   '/api/chat/message': typeof ApiChatMessageRoute
-  '/api/lyrics/search': typeof ApiLyricsSearchRoute
   '/api/nucleus/rename': typeof ApiNucleusRenameRoute
   '/api/tracks/analyze': typeof ApiTracksAnalyzeRoute
   '/api/tracks/analyze-playlist': typeof ApiTracksAnalyzePlaylistRoute
+  '/api/tracks/video': typeof ApiTracksVideoRoute
   '/api/chat/': typeof ApiChatIndexRoute
   '/api/tracks/': typeof ApiTracksIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/api/chat/emotion': typeof ApiChatEmotionRoute
   '/api/chat/message': typeof ApiChatMessageRoute
-  '/api/lyrics/search': typeof ApiLyricsSearchRoute
   '/api/nucleus/rename': typeof ApiNucleusRenameRoute
   '/api/tracks/analyze': typeof ApiTracksAnalyzeRoute
   '/api/tracks/analyze-playlist': typeof ApiTracksAnalyzePlaylistRoute
+  '/api/tracks/video': typeof ApiTracksVideoRoute
   '/api/chat': typeof ApiChatIndexRoute
   '/api/tracks': typeof ApiTracksIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/api/chat/emotion': typeof ApiChatEmotionRoute
   '/api/chat/message': typeof ApiChatMessageRoute
-  '/api/lyrics/search': typeof ApiLyricsSearchRoute
   '/api/nucleus/rename': typeof ApiNucleusRenameRoute
   '/api/tracks/analyze': typeof ApiTracksAnalyzeRoute
   '/api/tracks/analyze-playlist': typeof ApiTracksAnalyzePlaylistRoute
+  '/api/tracks/video': typeof ApiTracksVideoRoute
   '/api/chat/': typeof ApiChatIndexRoute
   '/api/tracks/': typeof ApiTracksIndexRoute
 }
@@ -104,46 +95,42 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/api/chat/emotion'
     | '/api/chat/message'
-    | '/api/lyrics/search'
     | '/api/nucleus/rename'
     | '/api/tracks/analyze'
     | '/api/tracks/analyze-playlist'
+    | '/api/tracks/video'
     | '/api/chat/'
     | '/api/tracks/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/api/chat/emotion'
     | '/api/chat/message'
-    | '/api/lyrics/search'
     | '/api/nucleus/rename'
     | '/api/tracks/analyze'
     | '/api/tracks/analyze-playlist'
+    | '/api/tracks/video'
     | '/api/chat'
     | '/api/tracks'
   id:
     | '__root__'
     | '/'
-    | '/api/chat/emotion'
     | '/api/chat/message'
-    | '/api/lyrics/search'
     | '/api/nucleus/rename'
     | '/api/tracks/analyze'
     | '/api/tracks/analyze-playlist'
+    | '/api/tracks/video'
     | '/api/chat/'
     | '/api/tracks/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ApiChatEmotionRoute: typeof ApiChatEmotionRoute
   ApiChatMessageRoute: typeof ApiChatMessageRoute
-  ApiLyricsSearchRoute: typeof ApiLyricsSearchRoute
   ApiNucleusRenameRoute: typeof ApiNucleusRenameRoute
   ApiTracksAnalyzeRoute: typeof ApiTracksAnalyzeRoute
   ApiTracksAnalyzePlaylistRoute: typeof ApiTracksAnalyzePlaylistRoute
+  ApiTracksVideoRoute: typeof ApiTracksVideoRoute
   ApiChatIndexRoute: typeof ApiChatIndexRoute
   ApiTracksIndexRoute: typeof ApiTracksIndexRoute
 }
@@ -171,6 +158,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/tracks/video': {
+      id: '/api/tracks/video'
+      path: '/api/tracks/video'
+      fullPath: '/api/tracks/video'
+      preLoaderRoute: typeof ApiTracksVideoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/tracks/analyze-playlist': {
       id: '/api/tracks/analyze-playlist'
       path: '/api/tracks/analyze-playlist'
@@ -192,13 +186,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiNucleusRenameRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/lyrics/search': {
-      id: '/api/lyrics/search'
-      path: '/api/lyrics/search'
-      fullPath: '/api/lyrics/search'
-      preLoaderRoute: typeof ApiLyricsSearchRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/chat/message': {
       id: '/api/chat/message'
       path: '/api/chat/message'
@@ -206,24 +193,16 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatMessageRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/chat/emotion': {
-      id: '/api/chat/emotion'
-      path: '/api/chat/emotion'
-      fullPath: '/api/chat/emotion'
-      preLoaderRoute: typeof ApiChatEmotionRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ApiChatEmotionRoute: ApiChatEmotionRoute,
   ApiChatMessageRoute: ApiChatMessageRoute,
-  ApiLyricsSearchRoute: ApiLyricsSearchRoute,
   ApiNucleusRenameRoute: ApiNucleusRenameRoute,
   ApiTracksAnalyzeRoute: ApiTracksAnalyzeRoute,
   ApiTracksAnalyzePlaylistRoute: ApiTracksAnalyzePlaylistRoute,
+  ApiTracksVideoRoute: ApiTracksVideoRoute,
   ApiChatIndexRoute: ApiChatIndexRoute,
   ApiTracksIndexRoute: ApiTracksIndexRoute,
 }

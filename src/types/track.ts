@@ -1,25 +1,31 @@
-export type Emotion = 'joy' | 'sadness' | 'anger' | 'fear' | 'love' | 'surprise' | 'calm' | 'nostalgia'
+export const EMOTIONS = ['joy', 'sadness', 'anger', 'fear', 'love', 'surprise', 'calm', 'nostalgia'] as const
 
+export type Emotion = (typeof EMOTIONS)[number]
+
+export function isEmotion(value: unknown): value is Emotion {
+  return typeof value === 'string' && (EMOTIONS as readonly string[]).includes(value)
+}
+
+// A catalog track as it appears in a user's nucleus
 export interface Track {
   id: number
-  spotify_id: string
-  spotify_url: string
+  spotify_id: string | null
+  deezer_id: number | null
+  isrc: string | null
   title: string
-  artist: string | null
-  lyrics: string | null
+  artist: string
+  album: string | null
+  cover_url: string | null
+  duration_ms: number | null
+  youtube_video_id: string | null
   genius_url: string | null
-  has_audio_preview: boolean
   emotion: Emotion
   valence: number | null
   energy: number | null
-  tempo: number | null
   genre: string | null
   mood_description: string | null
-  dominant_instruments: string | null
-  vocal_characteristics: string | null
-  duration: number | null
-  thumbnail_url: string | null
-  preview_url: string | null
+  lyrical_style: string | null
+  // When the track was added to this nucleus
   added_at: string
 }
 
@@ -27,10 +33,13 @@ export interface SpotifyMetadata {
   id: string
   name: string
   artists: { name: string }[]
-  preview_url: string | null
   duration_ms: number
   album: {
+    name?: string
     images: { url: string; height: number; width: number }[]
+  }
+  external_ids?: {
+    isrc?: string
   }
   external_urls?: {
     spotify: string
@@ -41,9 +50,10 @@ export interface AnalysisResult {
   emotion: Emotion
   valence: number
   energy: number
-  tempo: number
   genre: string
   mood_description: string
-  dominant_instruments: string
   vocal_characteristics: string
+  // Only returned by the (unused) audio analysis prompt
+  tempo?: number
+  dominant_instruments?: string
 }

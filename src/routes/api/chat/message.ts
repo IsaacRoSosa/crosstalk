@@ -1,77 +1,70 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { chatWithRotation, getGeminiApiKeys } from '../../../lib/gemini'
-import { trackQueries, chatQueries, nucleusQueries } from '../../../lib/database'
-import type { Track } from '../../../types/track'
-import type { NucleusMetadata } from '../../../types/chat'
+import { errorResponse, HttpError, json } from '../../../lib/http'
+import { requireUser } from '../../../lib/session'
+import { addMessages, listMessages, listNucleusTracks } from '../../../lib/repository'
+import { EMOTIONS, type Track } from '../../../types/track'
 
-export const Route = createFileRoute('/api/chat/message')({
-  server: {
-    handlers: {
-      POST: async ({ request }) => {
-        try {
-          const { message } = await request.json()
-          const geminiApiKeys = getGeminiApiKeys()
+const MAX_MESSAGE_LENGTH = 2000
+const HISTORY_LENGTH = 10
 
-          if (geminiApiKeys.length === 0) {
-            return new Response(
-              JSON.stringify({ error: 'No Gemini API keys configured' }),
-              { status: 500, headers: { 'Content-Type': 'application/json' } }
-            )
-          }
+function describeCollection(nucleusName: string, tracks: Track[]): string {
+  if (tracks.length === 0) {
+    return `You are someone who can read people through their music. The playlist "${nucleusName}" is still empty: the person hasn't added any tracks yet.`
+  }
 
-          const nucleus = nucleusQueries.get.get() as NucleusMetadata
-          const tracks = trackQueries.getAll.all() as Track[]
+  const emotionCounts: Record<string, number> = {}
+  let totalValence = 0
+  let totalEnergy = 0
+  let validValenceCount = 0
+  let validEnergyCount = 0
 
-          const emotionCounts: Record<string, number> = {}
-          let totalValence = 0
-          let totalEnergy = 0
-          let validValenceCount = 0
-          let validEnergyCount = 0
+  for (const track of tracks) {
+    emotionCounts[track.emotion] = (emotionCounts[track.emotion] || 0) + 1
+    if (track.valence !== null) {
+      totalValence += track.valence
+      validValenceCount++
+    }
+    if (track.energy !== null) {
+      totalEnergy += track.energy
+      validEnergyCount++
+    }
+  }
 
-          tracks.forEach(track => {
-            emotionCounts[track.emotion] = (emotionCounts[track.emotion] || 0) + 1
-            if (track.valence !== null && track.valence !== undefined) {
-              totalValence += track.valence
-              validValenceCount++
-            }
-            if (track.energy !== null && track.energy !== undefined) {
-              totalEnergy += track.energy
-              validEnergyCount++
-            }
-          })
+  const avgValence = validValenceCount > 0 ? totalValence / validValenceCount : 0
+  const avgEnergy = validEnergyCount > 0 ? totalEnergy / validEnergyCount : 0
 
-          const avgValence = validValenceCount > 0 ? totalValence / validValenceCount : 0
-          const avgEnergy = validEnergyCount > 0 ? totalEnergy / validEnergyCount : 0
+  const [dominantEmotion, dominantCount] = Object.entries(emotionCounts).sort(([, a], [, b]) => b - a)[0]
+  const dominantPercentage = ((dominantCount / tracks.length) * 100).toFixed(0)
+  const absentEmotions = EMOTIONS.filter((e) => !emotionCounts[e])
 
-          const sortedEmotions = Object.entries(emotionCounts)
-            .sort(([, a], [, b]) => b - a)
-          const dominantEmotion = sortedEmotions[0]
-          const dominantPercentage = ((dominantEmotion[1] / tracks.length) * 100).toFixed(0)
+  const trackSummary = tracks
+    .slice(0, 20)
+    .map(
+      (t) =>
+        `"${t.title}" by ${t.artist} - ${t.emotion}, valence:${t.valence?.toFixed(2)}, energy:${t.energy?.toFixed(2)}, ${t.mood_description}`,
+    )
+    .join('\n')
 
-          const allEmotions = ['joy', 'sadness', 'anger', 'fear', 'love', 'surprise', 'calm', 'nostalgia']
-          const absentEmotions = allEmotions.filter(e => !emotionCounts[e] || emotionCounts[e] === 0)
-
-          const trackSummary = tracks
-            .slice(0, 20)
-            .map(t => `"${t.title}" by ${t.artist} - ${t.emotion}, valence:${t.valence?.toFixed(2)}, energy:${t.energy?.toFixed(2)}, ${t.mood_description}`)
-            .join('\n')
-
-          const systemPrompt = `You are someone who can read people through their music. You know the playlist "${nucleus.name}" and what it says about the person who made it.
+  return `You are someone who can read people through their music. You know the playlist "${nucleusName}" and what it says about the person who made it.
 
 Total tracks: ${tracks.length}
 
 What you notice:
 - Average valence: ${avgValence.toFixed(2)}, energy: ${avgEnergy.toFixed(2)}
-- Dominant emotion: ${dominantEmotion[0]} (${dominantPercentage}%)
+- Dominant emotion: ${dominantEmotion} (${dominantPercentage}%)
 - Missing: ${absentEmotions.length > 0 ? absentEmotions.join(', ') : 'none'}
 
 Emotion breakdown:
-${Object.entries(emotionCounts).map(([emotion, count]) => `- ${emotion}: ${count}`).join('\n')}
+${Object.entries(emotionCounts)
+  .map(([emotion, count]) => `- ${emotion}: ${count}`)
+  .join('\n')}
 
 Sample tracks:
-${trackSummary}
+${trackSummary}`
+}
 
-How to talk:
+const HOW_TO_TALK = `How to talk:
 - Have a conversation. Respond to what they actually say first.
 - If they say "hi", say hi back. Don't dump analysis.
 - Keep it SHORT. 1-2 sentences usually. 3 max if you have something real to say.
@@ -90,36 +83,51 @@ Examples:
 
 You are not a therapist. You are just someone who notices patterns in music and what they might mean. Talk like a person.`
 
-          const recentMessages = chatQueries.getRecent.all(10) as any[]
-          const conversationHistory = recentMessages
-            .reverse()
-            .map(msg => ({
+export const Route = createFileRoute('/api/chat/message')({
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        try {
+          const ctx = await requireUser(request)
+          const body = await request.json()
+          const message = typeof body.message === 'string' ? body.message.trim() : ''
+          if (!message) {
+            throw new HttpError(400, 'Message is required')
+          }
+          if (message.length > MAX_MESSAGE_LENGTH) {
+            throw new HttpError(400, `Messages can be up to ${MAX_MESSAGE_LENGTH} characters`)
+          }
+
+          const geminiApiKeys = getGeminiApiKeys()
+          if (geminiApiKeys.length === 0) {
+            throw new Error('No Gemini API keys configured')
+          }
+
+          const [tracks, history] = await Promise.all([
+            listNucleusTracks(ctx.db, ctx.nucleus.id),
+            listMessages(ctx.db, ctx.nucleus.id, HISTORY_LENGTH),
+          ])
+
+          const systemPrompt = `${describeCollection(ctx.nucleus.name, tracks)}\n\n${HOW_TO_TALK}`
+
+          const response = await chatWithRotation(geminiApiKeys, [
+            { role: 'user', parts: [{ text: systemPrompt }] },
+            ...history.map((msg) => ({
               role: msg.role === 'user' ? 'user' : 'model',
               parts: [{ text: msg.content }],
-            }))
+            })),
+            { role: 'user', parts: [{ text: message }] },
+          ])
 
-          const response = await chatWithRotation(
-            geminiApiKeys,
-            [
-              { role: 'user', parts: [{ text: systemPrompt }] },
-              ...conversationHistory,
-              { role: 'user', parts: [{ text: message }] },
-            ]
-          )
+          const reply = response.trim().slice(0, 8000) || '...'
+          await addMessages(ctx.db, ctx.nucleus.id, [
+            { role: 'user', content: message },
+            { role: 'assistant', content: reply },
+          ])
 
-          chatQueries.insert.run('user', message, nucleus.name)
-          chatQueries.insert.run('assistant', response, nucleus.name)
-
-          return new Response(
-            JSON.stringify({ response }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } }
-          )
+          return json({ response: reply })
         } catch (error) {
-          console.error('Error processing chat message:', error)
-          return new Response(
-            JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-            { status: 500, headers: { 'Content-Type': 'application/json' } }
-          )
+          return errorResponse(error, 'Error processing chat message')
         }
       },
     },

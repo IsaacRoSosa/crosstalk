@@ -15,7 +15,7 @@ interface TrackColorsExtractorProps {
 }
 
 function TrackColorsExtractor({ track, onColorsExtracted }: TrackColorsExtractorProps) {
-  const { dominantColor, darkerColor, lighterColor, loading } = useExtractColors(track.thumbnail_url || '', {
+  const { dominantColor, darkerColor, lighterColor, loading } = useExtractColors(track.cover_url || '', {
     maxColors: 5,
     format: 'hex',
   })
@@ -1417,7 +1417,7 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
         const randomOffset = (Math.random() - 0.5) * 0.5 // Add some randomness
         const initialAngle = baseAngle + randomOffset
 
-        const { group, billboard, glassMaterial } = createTrackSphere(radius, initialAngle, track.thumbnail_url)
+        const { group, billboard, glassMaterial } = createTrackSphere(radius, initialAngle, track.cover_url)
         orbitGroup.add(group) // Add to orbit group so it inherits the tilt
         
         // Apply pre-extracted colors if available
@@ -1437,7 +1437,7 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
     <div ref={containerRef} className="w-full h-full">
       <canvas ref={canvasRef} className="nucleus-canvas" />
       {/* Hidden color extractors for each track */}
-      {tracks.map(track => track.thumbnail_url && (
+      {tracks.map(track => track.cover_url && (
         <TrackColorsExtractor
           key={track.id}
           track={track}

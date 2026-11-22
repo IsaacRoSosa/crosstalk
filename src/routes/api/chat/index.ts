@@ -1,40 +1,30 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { chatQueries, nucleusQueries } from '../../../lib/database'
-import type { ChatMessage, NucleusMetadata } from '../../../types/chat'
+import { errorResponse, json } from '../../../lib/http'
+import { requireUser } from '../../../lib/session'
+import { clearMessages, listMessages } from '../../../lib/repository'
 
 export const Route = createFileRoute('/api/chat/')({
   server: {
     handlers: {
-      GET: async () => {
+      // The user's nucleus and its conversation
+      GET: async ({ request }) => {
         try {
-          const messages = chatQueries.getAll.all() as ChatMessage[]
-          const nucleus = nucleusQueries.get.get() as NucleusMetadata
-
-          return new Response(
-            JSON.stringify({ messages, nucleus }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } }
-          )
+          const ctx = await requireUser(request)
+          const messages = await listMessages(ctx.db, ctx.nucleus.id)
+          const { id, name, dominant_emotion, updated_at } = ctx.nucleus
+          return json({ messages, nucleus: { id, name, dominant_emotion, updated_at } })
         } catch (error) {
-          console.error('Error fetching chat messages:', error)
-          return new Response(
-            JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-            { status: 500, headers: { 'Content-Type': 'application/json' } }
-          )
+          return errorResponse(error, 'Error fetching chat messages')
         }
       },
-      DELETE: async () => {
+
+      DELETE: async ({ request }) => {
         try {
-          chatQueries.deleteAll.run()
-          return new Response(
-            JSON.stringify({ success: true }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } }
-          )
+          const ctx = await requireUser(request)
+          await clearMessages(ctx.db, ctx.nucleus.id)
+          return json({ success: true })
         } catch (error) {
-          console.error('Error clearing chat messages:', error)
-          return new Response(
-            JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-            { status: 500, headers: { 'Content-Type': 'application/json' } }
-          )
+          return errorResponse(error, 'Error clearing chat messages')
         }
       },
     },

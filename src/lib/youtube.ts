@@ -1,21 +1,13 @@
-import { createServerFn } from '@tanstack/react-start'
+// Finds a playable YouTube video for a track (YouTube Data API search).
+export async function searchYouTubeVideoId(query: string, apiKey: string): Promise<string | null> {
+  const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&videoCategoryId=10&maxResults=1&key=${apiKey}`
 
-export const searchYouTube = createServerFn({ method: 'POST' })
-  .inputValidator((d: string) => d)
-  .handler(async ({ data: query }) => {
-    const apiKey = process.env.YOUTUBE_API_KEY
-    if (!apiKey) {
-      throw new Error('YouTube API key not configured')
-    }
+  const response = await fetch(searchUrl)
+  const result = await response.json()
 
-    const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&videoCategoryId=10&maxResults=1&key=${apiKey}`
+  if (!response.ok) {
+    throw new Error(result.error?.message || 'YouTube search failed')
+  }
 
-    const response = await fetch(searchUrl)
-    const result = await response.json()
-
-    if (!response.ok) {
-      throw new Error(result.error?.message || 'YouTube search failed')
-    }
-
-    return { videoId: (result.items?.[0]?.id?.videoId as string) || null }
-  })
+  return (result.items?.[0]?.id?.videoId as string | undefined) ?? null
+}

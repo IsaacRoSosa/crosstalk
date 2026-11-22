@@ -108,14 +108,3 @@ export async function fetchPlaylistTracks(
 
   return allTracks.slice(0, maxTracks)
 }
-
-export async function downloadPreviewMp3(previewUrl: string): Promise<Buffer> {
-  const response = await fetch(previewUrl)
-
-  if (!response.ok) {
-    throw new Error(`Failed to download preview MP3: ${response.statusText}`)
-  }
-
-  const arrayBuffer = await response.arrayBuffer()
-  return Buffer.from(arrayBuffer)
-}

@@ -5,7 +5,7 @@ import { NucleusVisualization } from '../components/NucleusVisualization'
 import type { NucleusVisualizationHandle } from '../components/NucleusVisualization'
 import { NucleusChat } from '../components/NucleusChat'
 import type { Track } from '../types/track'
-import { searchYouTube } from '../lib/youtube'
+import { apiFetch } from '../lib/api-client'
 import '../styles/galaxy.css'
 
 // YouTube IFrame API types
@@ -109,8 +109,14 @@ function App() {
 
   const searchYouTubeVideo = useCallback(async (track: Track): Promise<string | null> => {
     try {
-      const query = `${track.title} ${track.artist || ''} official audio`
-      const result = await searchYouTube({ data: query })
+      const response = await apiFetch('/api/tracks/video', {
+        method: 'POST',
+        body: JSON.stringify({ trackId: track.id }),
+      })
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'Video lookup failed')
+      }
       return result.videoId || null
     } catch (err) {
       console.error('YouTube search failed:', err)
@@ -399,8 +405,11 @@ function App() {
 
   const loadTracks = async () => {
     try {
-      const response = await fetch('/api/tracks')
+      const response = await apiFetch('/api/tracks')
       const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load tracks')
+      }
       setTracks(data.tracks || [])
     } catch (error) {
       console.error('Failed to load tracks:', error)
@@ -409,7 +418,7 @@ function App() {
 
   const loadNucleus = async () => {
     try {
-      const response = await fetch('/api/chat')
+      const response = await apiFetch('/api/chat')
       const data = await response.json()
       if (data.nucleus?.name) {
         setNucleusName(data.nucleus.name)
@@ -439,7 +448,7 @@ function App() {
 
         const pollInterval = setInterval(async () => {
           try {
-            const response = await fetch('/api/tracks')
+            const response = await apiFetch('/api/tracks')
             const data = await response.json()
             if (data.tracks) {
               setTracks(data.tracks)
@@ -454,9 +463,8 @@ function App() {
         }, 2000) // Poll every 2 seconds
 
         // Start playlist analysis
-        const response = await fetch('/api/tracks/analyze-playlist', {
+        const response = await apiFetch('/api/tracks/analyze-playlist', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ spotifyUrl: url }),
         })
 
@@ -493,9 +501,8 @@ function App() {
         }
       } else {
         // Handle single track (original behavior)
-        const response = await fetch('/api/tracks/analyze', {
+        const response = await apiFetch('/api/tracks/analyze', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ spotifyUrl: url }),
         })
 
@@ -522,11 +529,14 @@ function App() {
 
   const deleteTrack = async (id: number) => {
     try {
-      await fetch('/api/tracks', {
+      const response = await apiFetch('/api/tracks', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
       })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to remove track')
+      }
 
       setTracks(prev => prev.filter(t => t.id !== id))
     } catch (error) {
@@ -536,9 +546,8 @@ function App() {
 
   const renameNucleus = async () => {
     try {
-      const response = await fetch('/api/nucleus/rename', {
+      const response = await apiFetch('/api/nucleus/rename', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
       })
 
       const data = await response.json()
@@ -644,7 +653,6 @@ function App() {
           }}
           isAudioPlaying={isPlaying}
           audioEnergy={playingTrack?.energy ?? undefined}
-          audioTempo={playingTrack?.tempo ?? undefined}
         />
       </div>
 
@@ -1158,14 +1166,14 @@ function TrackCard({ track, isExpanded, onToggleExpand, onDelete, isSelected }: 
           )}
         </div>
       )}
-      {track.vocal_characteristics && (
+      {track.lyrical_style && (
         <p className={`text-xs text-white/40 mt-1 ${isExpanded ? '' : 'hidden'}`}>
-          <span className="text-white/30">Style:</span> {track.vocal_characteristics}
+          <span className="text-white/30">Style:</span> {track.lyrical_style}
         </p>
       )}
-      {track.lyrics && (
+      {track.genius_url && (
         <a
-          href={track.genius_url || '#'}
+          href={track.genius_url}
           target="_blank"
           rel="noopener noreferrer"
           className="text-xs text-white/50 hover:text-white hover:underline mt-2 inline-block"

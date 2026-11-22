@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, forwardRef } from 'react'
 import { Send, X, RotateCcw } from 'lucide-react'
 import type { ChatMessage } from '../types/chat'
+import { apiFetch } from '../lib/api-client'
 
 interface NucleusChatProps {
   nucleusName: string
@@ -31,8 +32,11 @@ export const NucleusChat = forwardRef<HTMLDivElement, NucleusChatProps>(function
 
   const loadMessages = async () => {
     try {
-      const response = await fetch('/api/chat')
+      const response = await apiFetch('/api/chat')
       const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load messages')
+      }
       setMessages(data.messages || [])
     } catch (error) {
       console.error('Failed to load messages:', error)
@@ -52,19 +56,20 @@ export const NucleusChat = forwardRef<HTMLDivElement, NucleusChatProps>(function
         id: Date.now(),
         role: 'user',
         content: userMessage,
-        timestamp: new Date().toISOString(),
-        nucleus_name: nucleusName,
+        created_at: new Date().toISOString(),
       },
     ])
 
     try {
-      const response = await fetch('/api/chat/message', {
+      const response = await apiFetch('/api/chat/message', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMessage }),
       })
 
       const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send message')
+      }
 
       setMessages(prev => [
         ...prev,
@@ -72,8 +77,7 @@ export const NucleusChat = forwardRef<HTMLDivElement, NucleusChatProps>(function
           id: Date.now() + 1,
           role: 'assistant',
           content: data.response,
-          timestamp: new Date().toISOString(),
-          nucleus_name: nucleusName,
+          created_at: new Date().toISOString(),
         },
       ])
     } catch (error) {
@@ -84,8 +88,7 @@ export const NucleusChat = forwardRef<HTMLDivElement, NucleusChatProps>(function
           id: Date.now() + 1,
           role: 'assistant',
           content: 'something went wrong on my end. try again.',
-          timestamp: new Date().toISOString(),
-          nucleus_name: nucleusName,
+          created_at: new Date().toISOString(),
         },
       ])
     } finally {
@@ -95,7 +98,10 @@ export const NucleusChat = forwardRef<HTMLDivElement, NucleusChatProps>(function
 
   const resetConversation = async () => {
     try {
-      await fetch('/api/chat', { method: 'DELETE' })
+      const response = await apiFetch('/api/chat', { method: 'DELETE' })
+      if (!response.ok) {
+        throw new Error('Failed to reset conversation')
+      }
       setMessages([])
     } catch (error) {
       console.error('Failed to reset conversation:', error)

@@ -1,199 +1,81 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { errorResponse, HttpError, json } from '../../../lib/http'
+import { requireEnv } from '../../../lib/env'
+import { requireUser } from '../../../lib/session'
 import { extractSpotifyPlaylistId, fetchPlaylistTracks } from '../../../lib/spotify'
-import { analyzeLyricsWithRotation, getGeminiApiKeys } from '../../../lib/gemini'
-import { searchGeniusLyrics } from '../../../lib/genius'
-import { trackQueries } from '../../../lib/database'
+import { addSpotifyTrack } from '../../../lib/track-pipeline'
 import type { Track } from '../../../types/track'
 
+// Number of tracks to add before stopping
+const TARGET_SUCCESS = 25
+
+// Note: since Spotify's 2026 Development Mode changes, playlist contents are only available
+// for playlists the signed-in Spotify user owns, so this fails for app-only access.
+// It will be replaced by pasting multiple track links and Deezer playlists.
 export const Route = createFileRoute('/api/tracks/analyze-playlist')({
   server: {
     handlers: {
       POST: async ({ request }) => {
         try {
+          const ctx = await requireUser(request)
           const { spotifyUrl } = await request.json()
 
-          const clientId = process.env.SPOTIFY_CLIENT_ID
-          const clientSecret = process.env.SPOTIFY_CLIENT_SECRET
-          const geniusToken = process.env.GENIUS_ACCESS_TOKEN
-          const geminiApiKeys = getGeminiApiKeys()
-
-          if (!clientId || !clientSecret || geminiApiKeys.length === 0) {
-            return new Response(
-              JSON.stringify({ error: 'Missing API credentials' }),
-              { status: 500, headers: { 'Content-Type': 'application/json' } }
-            )
-          }
-
-          console.log(`🔑 Loaded ${geminiApiKeys.length} Gemini API keys for rotation`)
-
-          const playlistId = extractSpotifyPlaylistId(spotifyUrl)
+          const playlistId = typeof spotifyUrl === 'string' ? extractSpotifyPlaylistId(spotifyUrl) : null
           if (!playlistId) {
-            return new Response(
-              JSON.stringify({ error: 'Invalid Spotify playlist URL' }),
-              { status: 400, headers: { 'Content-Type': 'application/json' } }
+            throw new HttpError(400, 'Invalid Spotify playlist URL')
+          }
+
+          let playlistTracks
+          try {
+            playlistTracks = await fetchPlaylistTracks(
+              playlistId,
+              requireEnv('SPOTIFY_CLIENT_ID'),
+              requireEnv('SPOTIFY_CLIENT_SECRET'),
+              100,
+            )
+          } catch (error) {
+            console.error('Error fetching playlist from Spotify:', error)
+            throw new HttpError(
+              502,
+              "Spotify no longer lets this app read playlists. Paste individual track links instead.",
             )
           }
 
-          // Fetch more tracks than needed to account for failures/duplicates
-          const TARGET_SUCCESS = 25
-          console.log(`📥 Fetching playlist tracks (ID: ${playlistId})...`)
-          const playlistTracks = await fetchPlaylistTracks(playlistId, clientId, clientSecret, 100)
-          console.log(`✓ Retrieved ${playlistTracks.length} tracks from playlist`)
+          const success: Track[] = []
+          const failed: Array<{ track: string; artist: string; reason: string }> = []
+          const skipped: Array<{ track: string; artist: string; reason: string }> = []
 
-          const results: {
-            success: Track[]
-            failed: Array<{ track: string; artist: string; reason: string }>
-            skipped: Array<{ track: string; artist: string; reason: string }>
-          } = {
-            success: [],
-            failed: [],
-            skipped: [],
-          }
-
-          console.log(`🎯 Target: ${TARGET_SUCCESS} successful additions\n`)
-
-          // Process each track sequentially until we reach target
-          for (let i = 0; i < playlistTracks.length; i++) {
-            const metadata = playlistTracks[i]
-
-            // Stop if we've reached the target number of successful additions
-            if (results.success.length >= TARGET_SUCCESS) {
-              console.log(`✅ Reached target of ${TARGET_SUCCESS} tracks!`)
-              break
-            }
+          for (const metadata of playlistTracks) {
+            if (success.length >= TARGET_SUCCESS) break
 
             const trackName = metadata.name
             const artistName = metadata.artists[0]?.name || 'Unknown Artist'
-            const spotifyId = metadata.id
-            const trackUrl = metadata.external_urls?.spotify || `https://open.spotify.com/track/${spotifyId}`
-
-            console.log(`\n[${i + 1}/${playlistTracks.length}] Processing: "${trackName}" by ${artistName}`)
 
             try {
-              // Check if track already exists
-              const existing = trackQueries.getBySpotifyId.get(spotifyId) as Track | undefined
-              if (existing) {
-                console.log(`  ⏭️  Skipped - already in collection`)
-                results.skipped.push({
-                  track: trackName,
-                  artist: artistName,
-                  reason: 'Already in collection',
-                })
-                continue
+              const result = await addSpotifyTrack(ctx, metadata.id, metadata)
+              if (result.status === 'already_in_nucleus') {
+                skipped.push({ track: trackName, artist: artistName, reason: 'Already in collection' })
+              } else {
+                success.push(result.track)
               }
-
-              // Search for lyrics
-              let lyrics = null
-              let geniusUrl = null
-
-              if (geniusToken) {
-                try {
-                  console.log(`  🔍 Searching lyrics on Genius...`)
-                  const lyricsResult = await searchGeniusLyrics(
-                    trackName,
-                    artistName,
-                    geniusToken
-                  )
-                  lyrics = lyricsResult.lyrics
-                  geniusUrl = lyricsResult.url
-                  console.log(`  ✓ Lyrics found (${lyrics?.length || 0} characters)`)
-                } catch (error) {
-                  // Lyrics not found - skip this track
-                  console.log(`  ✗ No lyrics found`)
-                  results.failed.push({
-                    track: trackName,
-                    artist: artistName,
-                    reason: 'No lyrics found',
-                  })
-                  continue
-                }
-              }
-
-              if (!lyrics) {
-                console.log(`  ✗ No lyrics available`)
-                results.failed.push({
-                  track: trackName,
-                  artist: artistName,
-                  reason: 'No lyrics found',
-                })
-                continue
-              }
-
-              // Analyze lyrics with API key rotation
-              console.log(`  🤖 Analyzing with Gemini AI...`)
-              const analysis = await analyzeLyricsWithRotation(
-                lyrics,
-                trackName,
-                artistName,
-                geminiApiKeys
-              )
-              console.log(`  ✓ Analysis complete - Emotion: ${analysis.emotion}`)
-
-              const thumbnailUrl = metadata.album.images[0]?.url || null
-
-              // Insert into database
-              console.log(`  💾 Saving to database...`)
-              const result = trackQueries.insert.run(
-                spotifyId,
-                trackUrl,
-                trackName,
-                artistName,
-                lyrics,
-                geniusUrl,
-                metadata.preview_url ? 1 : 0,
-                analysis.emotion,
-                analysis.valence,
-                analysis.energy,
-                analysis.tempo || null,
-                analysis.genre,
-                analysis.mood_description,
-                analysis.dominant_instruments || null,
-                analysis.vocal_characteristics,
-                metadata.duration_ms,
-                thumbnailUrl,
-                metadata.preview_url || null
-              )
-
-              const track = trackQueries.getById.get(result.lastInsertRowid) as Track
-              results.success.push(track)
-              console.log(`  ✅ SUCCESS - Added to collection (${results.success.length}/${TARGET_SUCCESS})`)
-
             } catch (error) {
-              console.log(`  ❌ FAILED - ${error instanceof Error ? error.message : 'Unknown error'}`)
-              results.failed.push({
-                track: trackName,
-                artist: artistName,
-                reason: error instanceof Error ? error.message : 'Unknown error',
-              })
+              const reason = error instanceof HttpError ? error.message : 'Could not analyze this track'
+              if (!(error instanceof HttpError)) console.error(`Error adding "${trackName}":`, error)
+              failed.push({ track: trackName, artist: artistName, reason })
             }
           }
 
-          console.log(`\n${'='.repeat(60)}`)
-          console.log(`📊 FINAL RESULTS:`)
-          console.log(`   ✅ Success: ${results.success.length}`)
-          console.log(`   ⏭️  Skipped: ${results.skipped.length}`)
-          console.log(`   ❌ Failed: ${results.failed.length}`)
-          console.log(`   📝 Total processed: ${results.success.length + results.skipped.length + results.failed.length}`)
-          console.log(`${'='.repeat(60)}\n`)
-
-          return new Response(
-            JSON.stringify({
-              totalProcessed: playlistTracks.length,
-              successCount: results.success.length,
-              failedCount: results.failed.length,
-              skippedCount: results.skipped.length,
-              tracks: results.success,
-              failed: results.failed,
-              skipped: results.skipped,
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } }
-          )
+          return json({
+            totalProcessed: success.length + skipped.length + failed.length,
+            successCount: success.length,
+            failedCount: failed.length,
+            skippedCount: skipped.length,
+            tracks: success,
+            failed,
+            skipped,
+          })
         } catch (error) {
-          console.error('Error analyzing playlist:', error)
-          return new Response(
-            JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-            { status: 500, headers: { 'Content-Type': 'application/json' } }
-          )
+          return errorResponse(error, 'Error analyzing playlist')
         }
       },
     },
