@@ -4,6 +4,13 @@
 // https://developer.apple.com/documentation/applemusicapi
 import { createPrivateKey, sign } from 'node:crypto'
 import { pickSong, type SongQuery } from './song-match'
+import {
+  songsToImportLines,
+  toLibraryPlaylists,
+  type LibraryPlaylist,
+  type LibraryPlaylistResource,
+  type LibrarySongResource,
+} from './apple-music-library'
 
 const API = 'https://api.music.apple.com/v1'
 // Apple allows up to ~6 months; a short-lived token cached per server instance is plenty
@@ -148,4 +155,49 @@ export async function searchAppleMusicSong(query: SongQuery, storefront?: string
   )
   const songs = (body.results?.songs?.data ?? []).map(toAppleMusicSong).filter((song): song is AppleMusicSong => song !== null)
   return pickSong(query, songs)
+}
+
+// ── Someone's own library (needs their Music User Token) ─────────────────────
+
+// Apple refused the person's token (expired, or they removed Crosstalk's access): reconnect
+export class AppleMusicTokenRejected extends Error {}
+
+async function libraryGet<T>(path: string, userToken: string): Promise<T> {
+  const response = await fetch(`${API}${path}`, {
+    headers: { Authorization: `Bearer ${developerToken()}`, 'Music-User-Token': userToken },
+    signal: AbortSignal.timeout(12_000),
+  })
+  if (response.status === 401 || response.status === 403) throw new AppleMusicTokenRejected(`Apple Music refused the token (${response.status})`)
+  if (!response.ok) throw new Error(`Apple Music library request failed: ${response.status}`)
+  return (await response.json()) as T
+}
+
+async function libraryPages<T>(path: string, userToken: string, max: number): Promise<T[]> {
+  const items: T[] = []
+  let next: string | undefined = path
+  while (next && items.length < max) {
+    const page: { data: T[]; next?: string } = await libraryGet(next, userToken)
+    items.push(...page.data)
+    next = page.next?.replace(/^\/v1/, '')
+  }
+  return items.slice(0, max)
+}
+
+// The person's storefront (country), for the catalog links of their songs
+export async function fetchUserStorefront(userToken: string): Promise<string> {
+  const body = await libraryGet<{ data: Array<{ id: string }> }>('/me/storefront', userToken)
+  return storefrontOf(body.data[0]?.id)
+}
+
+export async function fetchLibraryPlaylists(userToken: string): Promise<LibraryPlaylist[]> {
+  return toLibraryPlaylists(await libraryPages<LibraryPlaylistResource>('/me/library/playlists?limit=100', userToken, 500))
+}
+
+export async function fetchLibraryPlaylistLines(userToken: string, playlistId: string, storefront: string, max = 100): Promise<string[]> {
+  const songs = await libraryPages<LibrarySongResource>(
+    `/me/library/playlists/${encodeURIComponent(playlistId)}/tracks?limit=100&include=catalog`,
+    userToken,
+    max,
+  )
+  return songsToImportLines(songs, storefrontOf(storefront))
 }

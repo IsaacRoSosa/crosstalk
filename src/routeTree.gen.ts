@@ -21,6 +21,7 @@ import { Route as STokenRouteImport } from './routes/s/$token'
 import { Route as ApiAccountIndexRouteImport } from './routes/api/account/index'
 import { Route as ApiAccountMergeRouteImport } from './routes/api/account/merge'
 import { Route as ApiAiConnectionRouteImport } from './routes/api/ai/connection'
+import { Route as ApiAppleMusicConnectionRouteImport } from './routes/api/apple-music/connection'
 import { Route as ApiAppleMusicTokenRouteImport } from './routes/api/apple-music/token'
 import { Route as ApiChatIndexRouteImport } from './routes/api/chat/index'
 import { Route as ApiChatMessageRouteImport } from './routes/api/chat/message'
@@ -31,6 +32,8 @@ import { Route as ApiTracksTransferRouteImport } from './routes/api/tracks/trans
 import { Route as ApiTracksVideoRouteImport } from './routes/api/tracks/video'
 import { Route as AppNNucleusIdRouteImport } from './routes/app/n/$nucleusId'
 import { Route as ApiAiOpenrouterExchangeRouteImport } from './routes/api/ai/openrouter/exchange'
+import { Route as ApiAppleMusicPlaylistsIndexRouteImport } from './routes/api/apple-music/playlists/index'
+import { Route as ApiAppleMusicPlaylistsPlaylistIdRouteImport } from './routes/api/apple-music/playlists/$playlistId'
 import { Route as ApiNucleiNucleusIdIndexRouteImport } from './routes/api/nuclei/$nucleusId/index'
 import { Route as ApiNucleiNucleusIdReadRouteImport } from './routes/api/nuclei/$nucleusId/read'
 import { Route as ApiNucleiNucleusIdShareRouteImport } from './routes/api/nuclei/$nucleusId/share'
@@ -95,6 +98,11 @@ const ApiAiConnectionRoute = ApiAiConnectionRouteImport.update({
   path: '/api/ai/connection',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAppleMusicConnectionRoute = ApiAppleMusicConnectionRouteImport.update({
+  id: '/api/apple-music/connection',
+  path: '/api/apple-music/connection',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAppleMusicTokenRoute = ApiAppleMusicTokenRouteImport.update({
   id: '/api/apple-music/token',
   path: '/api/apple-music/token',
@@ -145,6 +153,18 @@ const ApiAiOpenrouterExchangeRoute = ApiAiOpenrouterExchangeRouteImport.update({
   path: '/api/ai/openrouter/exchange',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAppleMusicPlaylistsIndexRoute =
+  ApiAppleMusicPlaylistsIndexRouteImport.update({
+    id: '/api/apple-music/playlists/',
+    path: '/api/apple-music/playlists/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAppleMusicPlaylistsPlaylistIdRoute =
+  ApiAppleMusicPlaylistsPlaylistIdRouteImport.update({
+    id: '/api/apple-music/playlists/$playlistId',
+    path: '/api/apple-music/playlists/$playlistId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiNucleiNucleusIdIndexRoute = ApiNucleiNucleusIdIndexRouteImport.update({
   id: '/api/nuclei/$nucleusId/',
   path: '/api/nuclei/$nucleusId/',
@@ -173,6 +193,7 @@ export interface FileRoutesByFullPath {
   '/app/': typeof AppIndexRoute
   '/api/account/merge': typeof ApiAccountMergeRoute
   '/api/ai/connection': typeof ApiAiConnectionRoute
+  '/api/apple-music/connection': typeof ApiAppleMusicConnectionRoute
   '/api/apple-music/token': typeof ApiAppleMusicTokenRoute
   '/api/chat/message': typeof ApiChatMessageRoute
   '/api/tracks/import': typeof ApiTracksImportRoute
@@ -184,8 +205,10 @@ export interface FileRoutesByFullPath {
   '/api/nuclei/': typeof ApiNucleiIndexRoute
   '/api/tracks/': typeof ApiTracksIndexRoute
   '/api/ai/openrouter/exchange': typeof ApiAiOpenrouterExchangeRoute
+  '/api/apple-music/playlists/$playlistId': typeof ApiAppleMusicPlaylistsPlaylistIdRoute
   '/api/nuclei/$nucleusId/read': typeof ApiNucleiNucleusIdReadRoute
   '/api/nuclei/$nucleusId/share': typeof ApiNucleiNucleusIdShareRoute
+  '/api/apple-music/playlists/': typeof ApiAppleMusicPlaylistsIndexRoute
   '/api/nuclei/$nucleusId/': typeof ApiNucleiNucleusIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -200,6 +223,7 @@ export interface FileRoutesByTo {
   '/app': typeof AppIndexRoute
   '/api/account/merge': typeof ApiAccountMergeRoute
   '/api/ai/connection': typeof ApiAiConnectionRoute
+  '/api/apple-music/connection': typeof ApiAppleMusicConnectionRoute
   '/api/apple-music/token': typeof ApiAppleMusicTokenRoute
   '/api/chat/message': typeof ApiChatMessageRoute
   '/api/tracks/import': typeof ApiTracksImportRoute
@@ -211,8 +235,10 @@ export interface FileRoutesByTo {
   '/api/nuclei': typeof ApiNucleiIndexRoute
   '/api/tracks': typeof ApiTracksIndexRoute
   '/api/ai/openrouter/exchange': typeof ApiAiOpenrouterExchangeRoute
+  '/api/apple-music/playlists/$playlistId': typeof ApiAppleMusicPlaylistsPlaylistIdRoute
   '/api/nuclei/$nucleusId/read': typeof ApiNucleiNucleusIdReadRoute
   '/api/nuclei/$nucleusId/share': typeof ApiNucleiNucleusIdShareRoute
+  '/api/apple-music/playlists': typeof ApiAppleMusicPlaylistsIndexRoute
   '/api/nuclei/$nucleusId': typeof ApiNucleiNucleusIdIndexRoute
 }
 export interface FileRoutesById {
@@ -228,6 +254,7 @@ export interface FileRoutesById {
   '/app/': typeof AppIndexRoute
   '/api/account/merge': typeof ApiAccountMergeRoute
   '/api/ai/connection': typeof ApiAiConnectionRoute
+  '/api/apple-music/connection': typeof ApiAppleMusicConnectionRoute
   '/api/apple-music/token': typeof ApiAppleMusicTokenRoute
   '/api/chat/message': typeof ApiChatMessageRoute
   '/api/tracks/import': typeof ApiTracksImportRoute
@@ -239,8 +266,10 @@ export interface FileRoutesById {
   '/api/nuclei/': typeof ApiNucleiIndexRoute
   '/api/tracks/': typeof ApiTracksIndexRoute
   '/api/ai/openrouter/exchange': typeof ApiAiOpenrouterExchangeRoute
+  '/api/apple-music/playlists/$playlistId': typeof ApiAppleMusicPlaylistsPlaylistIdRoute
   '/api/nuclei/$nucleusId/read': typeof ApiNucleiNucleusIdReadRoute
   '/api/nuclei/$nucleusId/share': typeof ApiNucleiNucleusIdShareRoute
+  '/api/apple-music/playlists/': typeof ApiAppleMusicPlaylistsIndexRoute
   '/api/nuclei/$nucleusId/': typeof ApiNucleiNucleusIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -257,6 +286,7 @@ export interface FileRouteTypes {
     | '/app/'
     | '/api/account/merge'
     | '/api/ai/connection'
+    | '/api/apple-music/connection'
     | '/api/apple-music/token'
     | '/api/chat/message'
     | '/api/tracks/import'
@@ -268,8 +298,10 @@ export interface FileRouteTypes {
     | '/api/nuclei/'
     | '/api/tracks/'
     | '/api/ai/openrouter/exchange'
+    | '/api/apple-music/playlists/$playlistId'
     | '/api/nuclei/$nucleusId/read'
     | '/api/nuclei/$nucleusId/share'
+    | '/api/apple-music/playlists/'
     | '/api/nuclei/$nucleusId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -284,6 +316,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/api/account/merge'
     | '/api/ai/connection'
+    | '/api/apple-music/connection'
     | '/api/apple-music/token'
     | '/api/chat/message'
     | '/api/tracks/import'
@@ -295,8 +328,10 @@ export interface FileRouteTypes {
     | '/api/nuclei'
     | '/api/tracks'
     | '/api/ai/openrouter/exchange'
+    | '/api/apple-music/playlists/$playlistId'
     | '/api/nuclei/$nucleusId/read'
     | '/api/nuclei/$nucleusId/share'
+    | '/api/apple-music/playlists'
     | '/api/nuclei/$nucleusId'
   id:
     | '__root__'
@@ -311,6 +346,7 @@ export interface FileRouteTypes {
     | '/app/'
     | '/api/account/merge'
     | '/api/ai/connection'
+    | '/api/apple-music/connection'
     | '/api/apple-music/token'
     | '/api/chat/message'
     | '/api/tracks/import'
@@ -322,8 +358,10 @@ export interface FileRouteTypes {
     | '/api/nuclei/'
     | '/api/tracks/'
     | '/api/ai/openrouter/exchange'
+    | '/api/apple-music/playlists/$playlistId'
     | '/api/nuclei/$nucleusId/read'
     | '/api/nuclei/$nucleusId/share'
+    | '/api/apple-music/playlists/'
     | '/api/nuclei/$nucleusId/'
   fileRoutesById: FileRoutesById
 }
@@ -339,6 +377,7 @@ export interface RootRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
   ApiAccountMergeRoute: typeof ApiAccountMergeRoute
   ApiAiConnectionRoute: typeof ApiAiConnectionRoute
+  ApiAppleMusicConnectionRoute: typeof ApiAppleMusicConnectionRoute
   ApiAppleMusicTokenRoute: typeof ApiAppleMusicTokenRoute
   ApiChatMessageRoute: typeof ApiChatMessageRoute
   ApiTracksImportRoute: typeof ApiTracksImportRoute
@@ -350,8 +389,10 @@ export interface RootRouteChildren {
   ApiNucleiIndexRoute: typeof ApiNucleiIndexRoute
   ApiTracksIndexRoute: typeof ApiTracksIndexRoute
   ApiAiOpenrouterExchangeRoute: typeof ApiAiOpenrouterExchangeRoute
+  ApiAppleMusicPlaylistsPlaylistIdRoute: typeof ApiAppleMusicPlaylistsPlaylistIdRoute
   ApiNucleiNucleusIdReadRoute: typeof ApiNucleiNucleusIdReadRoute
   ApiNucleiNucleusIdShareRoute: typeof ApiNucleiNucleusIdShareRoute
+  ApiAppleMusicPlaylistsIndexRoute: typeof ApiAppleMusicPlaylistsIndexRoute
   ApiNucleiNucleusIdIndexRoute: typeof ApiNucleiNucleusIdIndexRoute
 }
 
@@ -441,6 +482,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiConnectionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/apple-music/connection': {
+      id: '/api/apple-music/connection'
+      path: '/api/apple-music/connection'
+      fullPath: '/api/apple-music/connection'
+      preLoaderRoute: typeof ApiAppleMusicConnectionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/apple-music/token': {
       id: '/api/apple-music/token'
       path: '/api/apple-music/token'
@@ -511,6 +559,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiOpenrouterExchangeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/apple-music/playlists/': {
+      id: '/api/apple-music/playlists/'
+      path: '/api/apple-music/playlists'
+      fullPath: '/api/apple-music/playlists/'
+      preLoaderRoute: typeof ApiAppleMusicPlaylistsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/apple-music/playlists/$playlistId': {
+      id: '/api/apple-music/playlists/$playlistId'
+      path: '/api/apple-music/playlists/$playlistId'
+      fullPath: '/api/apple-music/playlists/$playlistId'
+      preLoaderRoute: typeof ApiAppleMusicPlaylistsPlaylistIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/nuclei/$nucleusId/': {
       id: '/api/nuclei/$nucleusId/'
       path: '/api/nuclei/$nucleusId'
@@ -547,6 +609,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppIndexRoute: AppIndexRoute,
   ApiAccountMergeRoute: ApiAccountMergeRoute,
   ApiAiConnectionRoute: ApiAiConnectionRoute,
+  ApiAppleMusicConnectionRoute: ApiAppleMusicConnectionRoute,
   ApiAppleMusicTokenRoute: ApiAppleMusicTokenRoute,
   ApiChatMessageRoute: ApiChatMessageRoute,
   ApiTracksImportRoute: ApiTracksImportRoute,
@@ -558,8 +621,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiNucleiIndexRoute: ApiNucleiIndexRoute,
   ApiTracksIndexRoute: ApiTracksIndexRoute,
   ApiAiOpenrouterExchangeRoute: ApiAiOpenrouterExchangeRoute,
+  ApiAppleMusicPlaylistsPlaylistIdRoute: ApiAppleMusicPlaylistsPlaylistIdRoute,
   ApiNucleiNucleusIdReadRoute: ApiNucleiNucleusIdReadRoute,
   ApiNucleiNucleusIdShareRoute: ApiNucleiNucleusIdShareRoute,
+  ApiAppleMusicPlaylistsIndexRoute: ApiAppleMusicPlaylistsIndexRoute,
   ApiNucleiNucleusIdIndexRoute: ApiNucleiNucleusIdIndexRoute,
 }
 export const routeTree = rootRouteImport

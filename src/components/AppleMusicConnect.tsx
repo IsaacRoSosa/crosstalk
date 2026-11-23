@@ -1,8 +1,13 @@
 // "connect apple music": sign in with Apple, pick one of your playlists (Replay first), and its
-// songs go into the import box. Hidden when Apple Music isn't set up on the server.
+// songs go into the import box. A Google account keeps the connection, so other devices skip the
+// sign-in; a guest's stays in this browser. Hidden when Apple Music isn't set up on the server.
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AppleMusicReconnect,
   AppleMusicUnavailable,
+  connectAppleMusic,
+  disconnectAppleMusic,
+  isAppleMusicSaved,
   isSuggestedPlaylist,
   listLibraryPlaylists,
   playlistImportInput,
@@ -11,47 +16,35 @@ import {
   type MusicKitInstance,
 } from '../lib/apple-music-client'
 
-interface AppleMusicConnectProps {
-  // Called with the import lines for the playlist the person picked
-  onPick: (input: string, playlistName: string, songCount: number) => void
-  className?: string
-}
-
-type State =
-  | { kind: 'loading' }
-  | { kind: 'hidden' }
-  | { kind: 'ready' }
-  | { kind: 'connecting' }
-  | { kind: 'playlists'; playlists: LibraryPlaylist[] }
-  | { kind: 'reading'; playlists: LibraryPlaylist[]; name: string }
-
 function friendlyError(error: unknown): string {
+  if (error instanceof AppleMusicReconnect) return 'Apple Music needs you to connect again.'
   const message = error instanceof Error ? error.message : String(error)
   if (/AUTHORIZATION_ERROR|Unauthorized|cancel/i.test(message)) return 'Apple Music sign-in was cancelled or failed. Try again.'
-  if (/403|subscription/i.test(message)) return 'Apple Music needs an active subscription to read your library. Try reconnecting.'
   return message || 'Something went wrong with Apple Music. Try again.'
 }
 
-export function AppleMusicConnect({ onPick, className = '' }: AppleMusicConnectProps) {
+// MusicKit (for signing in) and whether the account already has Apple Music saved
+function useAppleMusic() {
   const [music, setMusic] = useState<MusicKitInstance | null>(null)
-  const [state, setState] = useState<State>({ kind: 'loading' })
+  const [status, setStatus] = useState<'loading' | 'hidden' | 'ready'>('loading')
+  const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState('')
 
   useEffect(() => {
     let cancelled = false
-    prepareMusicKit()
-      .then((instance) => {
+    Promise.all([prepareMusicKit(), isAppleMusicSaved().catch(() => false)])
+      .then(([instance, isSaved]) => {
         if (cancelled) return
         setMusic(instance)
-        setState({ kind: 'ready' })
+        setSaved(isSaved)
+        setStatus('ready')
       })
       .catch((err) => {
         if (cancelled) return
-        if (err instanceof AppleMusicUnavailable) setState({ kind: 'hidden' })
+        if (err instanceof AppleMusicUnavailable) setStatus('hidden')
         else {
-          setState({ kind: 'ready' })
           setError(friendlyError(err))
+          setStatus('ready')
         }
       })
     return () => {
@@ -59,67 +52,85 @@ export function AppleMusicConnect({ onPick, className = '' }: AppleMusicConnectP
     }
   }, [])
 
-  const connect = async () => {
+  const connected = saved || Boolean(music?.isAuthorized)
+  return { music, setMusic, status, saved, setSaved, connected, error, setError }
+}
+
+interface AppleMusicConnectProps {
+  // Called with the import lines for the playlist the person picked
+  onPick: (input: string, playlistName: string, songCount: number) => void
+  className?: string
+}
+
+type View = { kind: 'button' } | { kind: 'connecting' } | { kind: 'playlists'; playlists: LibraryPlaylist[]; reading: string | null }
+
+export function AppleMusicConnect({ onPick, className = '' }: AppleMusicConnectProps) {
+  const { music, setMusic, status, saved, setSaved, connected, error, setError } = useAppleMusic()
+  const [view, setView] = useState<View>({ kind: 'button' })
+  const [filter, setFilter] = useState('')
+
+  const open = async () => {
     setError(null)
-    setState({ kind: 'connecting' })
+    setView({ kind: 'connecting' })
     try {
       const instance = music ?? (await prepareMusicKit())
       setMusic(instance)
-      if (!instance.isAuthorized) await instance.authorize()
-      const playlists = await listLibraryPlaylists(instance)
-      setState({ kind: 'playlists', playlists })
+      // Signs in with Apple when needed (first thing in the click, so the window isn't blocked), and
+      // saves a browser-only connection to the account
+      if (!saved) setSaved((await connectAppleMusic(instance)).saved)
+      setView({ kind: 'playlists', playlists: await listLibraryPlaylists(instance), reading: null })
     } catch (err) {
+      if (err instanceof AppleMusicReconnect) setSaved(false)
       setError(friendlyError(err))
-      setState({ kind: 'ready' })
+      setView({ kind: 'button' })
     }
   }
 
   const pick = async (playlist: LibraryPlaylist, playlists: LibraryPlaylist[]) => {
-    if (!music) return
     setError(null)
-    setState({ kind: 'reading', playlists, name: playlist.name })
+    setView({ kind: 'playlists', playlists, reading: playlist.id })
     try {
       const { input, count } = await playlistImportInput(music, playlist.id)
-      if (count === 0) {
-        setError(`"${playlist.name}" has no songs Crosstalk can read.`)
-        setState({ kind: 'playlists', playlists })
-        return
-      }
-      onPick(input, playlist.name, count)
-      setState({ kind: 'playlists', playlists })
+      if (count === 0) setError(`"${playlist.name}" has no songs Crosstalk can read.`)
+      else onPick(input, playlist.name, count)
+      setView({ kind: 'playlists', playlists, reading: null })
     } catch (err) {
+      if (err instanceof AppleMusicReconnect) {
+        setSaved(false)
+        setView({ kind: 'button' })
+      } else setView({ kind: 'playlists', playlists, reading: null })
       setError(friendlyError(err))
-      setState({ kind: 'playlists', playlists })
     }
   }
 
   const disconnect = async () => {
-    await music?.unauthorize().catch(() => {})
+    await disconnectAppleMusic(music).catch(() => {})
+    setSaved(false)
     setFilter('')
-    setState({ kind: 'ready' })
+    setView({ kind: 'button' })
   }
 
-  const playlists = state.kind === 'playlists' || state.kind === 'reading' ? state.playlists : []
+  const playlists = view.kind === 'playlists' ? view.playlists : []
   const visible = useMemo(() => {
     const term = filter.trim().toLowerCase()
     return term ? playlists.filter((p) => p.name.toLowerCase().includes(term)) : playlists
   }, [playlists, filter])
 
-  if (state.kind === 'hidden' || state.kind === 'loading') return null
+  if (status !== 'ready') return null
 
   return (
     <div className={`font-mono text-[11px] ${className}`}>
-      {(state.kind === 'ready' || state.kind === 'connecting') && (
+      {view.kind !== 'playlists' && (
         <button
-          onClick={connect}
-          disabled={state.kind === 'connecting'}
+          onClick={open}
+          disabled={view.kind === 'connecting'}
           className="border border-white/30 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/80 transition-colors hover:border-white hover:text-white disabled:text-white/40"
         >
-          {state.kind === 'connecting' ? 'connecting...' : music?.isAuthorized ? 'pick an apple music playlist' : 'connect apple music'}
+          {view.kind === 'connecting' ? 'connecting...' : connected ? 'pick an apple music playlist' : 'connect apple music'}
         </button>
       )}
 
-      {(state.kind === 'playlists' || state.kind === 'reading') && (
+      {view.kind === 'playlists' && (
         <div className="border border-white/25">
           <div className="flex items-center gap-2 border-b border-white/15 px-3 py-2">
             <span className="text-[10px] uppercase tracking-[0.18em] text-white/50">your apple music playlists</span>
@@ -138,32 +149,29 @@ export function AppleMusicConnect({ onPick, className = '' }: AppleMusicConnectP
           )}
           <ul className="max-h-56 overflow-y-auto">
             {visible.length === 0 && <li className="px-3 py-3 text-white/45">No playlists found in your library.</li>}
-            {visible.map((playlist) => {
-              const busy = state.kind === 'reading' && state.name === playlist.name
-              return (
-                <li key={playlist.id}>
-                  <button
-                    onClick={() => pick(playlist, playlists)}
-                    disabled={state.kind === 'reading'}
-                    className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-white/[0.06] disabled:opacity-60"
-                  >
-                    {playlist.artworkUrl ? (
-                      <img src={playlist.artworkUrl} alt="" className="h-8 w-8 shrink-0 object-cover" />
-                    ) : (
-                      <span className="h-8 w-8 shrink-0 border border-white/20" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-white/85">{playlist.name}</span>
-                    {busy ? (
-                      <span className="shrink-0 text-[10px] text-white/50">reading...</span>
-                    ) : (
-                      isSuggestedPlaylist(playlist.name) && (
-                        <span className="shrink-0 text-[9px] uppercase tracking-[0.15em] text-white/40">most honest</span>
-                      )
-                    )}
-                  </button>
-                </li>
-              )
-            })}
+            {visible.map((playlist) => (
+              <li key={playlist.id}>
+                <button
+                  onClick={() => pick(playlist, playlists)}
+                  disabled={view.reading !== null}
+                  className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-white/[0.06] disabled:opacity-60"
+                >
+                  {playlist.artworkUrl ? (
+                    <img src={playlist.artworkUrl} alt="" className="h-8 w-8 shrink-0 object-cover" />
+                  ) : (
+                    <span className="h-8 w-8 shrink-0 border border-white/20" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate text-white/85">{playlist.name}</span>
+                  {view.reading === playlist.id ? (
+                    <span className="shrink-0 text-[10px] text-white/50">reading...</span>
+                  ) : (
+                    isSuggestedPlaylist(playlist.name) && (
+                      <span className="shrink-0 text-[9px] uppercase tracking-[0.15em] text-white/40">most honest</span>
+                    )
+                  )}
+                </button>
+              </li>
+            ))}
           </ul>
         </div>
       )}
@@ -173,76 +181,55 @@ export function AppleMusicConnect({ onPick, className = '' }: AppleMusicConnectP
   )
 }
 
-// The profile's "apple music" block: connect or disconnect without importing anything yet. The
-// connection belongs to this browser (MusicKit keeps it), not to the Crosstalk account.
+// The profile's "apple music" block: connect or disconnect without importing anything yet
 export function AppleMusicStatus() {
-  const [music, setMusic] = useState<MusicKitInstance | null>(null)
-  const [state, setState] = useState<'loading' | 'hidden' | 'ready' | 'busy'>('loading')
-  const [connected, setConnected] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    prepareMusicKit()
-      .then((instance) => {
-        if (cancelled) return
-        setMusic(instance)
-        setConnected(instance.isAuthorized)
-        setState('ready')
-      })
-      .catch((err) => {
-        if (cancelled) return
-        if (err instanceof AppleMusicUnavailable) setState('hidden')
-        else {
-          setError(friendlyError(err))
-          setState('ready')
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const { music, setMusic, status, saved, setSaved, connected, error, setError } = useAppleMusic()
+  const [busy, setBusy] = useState(false)
 
   const toggle = async () => {
     setError(null)
-    setState('busy')
+    setBusy(true)
     try {
       const instance = music ?? (await prepareMusicKit())
       setMusic(instance)
-      if (instance.isAuthorized) await instance.unauthorize()
-      else await instance.authorize()
-      setConnected(instance.isAuthorized)
+      if (connected) {
+        await disconnectAppleMusic(instance)
+        setSaved(false)
+      } else {
+        setSaved((await connectAppleMusic(instance)).saved)
+      }
     } catch (err) {
       setError(friendlyError(err))
     } finally {
-      setState('ready')
+      setBusy(false)
     }
   }
 
-  if (state === 'loading') return <p className="text-xs text-white/40">loading...</p>
-  if (state === 'hidden') return <p className="text-[13px] text-white/50">Apple Music isn't available yet.</p>
+  if (status === 'loading') return <p className="text-xs text-white/40">loading...</p>
+  if (status === 'hidden') return <p className="text-[13px] text-white/50">Apple Music isn't available yet.</p>
 
   return (
     <div className="space-y-3 text-[13px] leading-relaxed text-white/70">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <p className="text-white">{connected ? 'connected in this browser' : 'not connected'}</p>
+        <p className="text-white">{saved ? 'connected to your account' : connected ? 'connected in this browser' : 'not connected'}</p>
         <button
           onClick={toggle}
-          disabled={state === 'busy'}
+          disabled={busy}
           className={
             connected
               ? 'border border-white/30 px-4 py-2 text-[11px] uppercase tracking-[0.12em] hover:border-white disabled:opacity-40'
               : 'bg-white px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-black hover:bg-white/85 disabled:opacity-40'
           }
         >
-          {state === 'busy' ? 'one moment...' : connected ? 'disconnect' : 'connect apple music'}
+          {busy ? 'one moment...' : connected ? 'disconnect' : 'connect apple music'}
         </button>
       </div>
       <p className="text-[12px] text-white/50">
-        {connected
-          ? 'Pick a playlist (your Replay works best) from "add songs" in any nucleus. '
-          : 'Connect it to add songs straight from your playlists, like your Replay. '}
-        Your Apple Music sign-in stays in this browser; Crosstalk only receives the songs you pick.
+        {saved
+          ? 'Pick a playlist (your Replay works best) from "add songs" in any nucleus, on any device. Crosstalk keeps your Apple Music sign-in encrypted and only reads your playlists.'
+          : connected
+            ? 'Save your nucleus with Google to keep Apple Music connected on your other devices too.'
+            : 'Connect it to add songs straight from your playlists, like your Replay.'}
       </p>
       {error && <p className="text-[12px] text-white/60">{error}</p>}
     </div>

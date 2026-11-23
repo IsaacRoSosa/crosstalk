@@ -131,6 +131,7 @@ function Profile() {
             </li>
             <li>{isGuest ? 'a random guest id' : 'your Google email, name and picture'}</li>
             <li>your OpenRouter key, encrypted, if you connected it</li>
+            {!isGuest && <li>your Apple Music sign-in, encrypted, if you connected it</li>}
           </ul>
           <p className="mt-4 text-[12px] text-white/50">
             Nothing is sold or shared for ads.{' '}
@@ -145,7 +146,8 @@ function Profile() {
           <h2 className="mb-4 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">delete account</h2>
           <div className="space-y-3 text-[13px] leading-relaxed text-white/70">
             <p>
-              This deletes your account, every nucleus in it, your chats and your OpenRouter key from Crosstalk, right away.
+              This deletes your account, every nucleus in it, your chats, your OpenRouter key and your Apple Music connection from
+              Crosstalk, right away.
               It can't be undone.
             </p>
             <p className="text-[12px] text-white/50">

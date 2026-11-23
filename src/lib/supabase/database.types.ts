@@ -41,6 +41,30 @@ export type Database = {
         }
         Relationships: []
       }
+      apple_music_connections: {
+        Row: {
+          created_at: string
+          encrypted_token: string
+          storefront: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          encrypted_token: string
+          storefront?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          encrypted_token?: string
+          storefront?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           content: string

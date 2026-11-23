@@ -1,25 +1,26 @@
-// Connecting Apple Music in the browser with MusicKit JS: the person signs in with Apple, we list
-// their library playlists and turn the one they pick into lines the import already understands
-// (catalog song links, or title/artist rows for songs Apple has no catalog entry for). The Music
-// User Token stays in the browser; the server only ever receives those lines.
+// Connecting Apple Music in the browser. MusicKit JS is only used to sign in with Apple and get the
+// Music User Token; reading playlists goes through our server, which keeps a Google account's
+// token (encrypted) so other devices don't have to connect again. A guest's token stays in this
+// browser and is sent along with each request instead.
+import { apiFetch } from './api-client'
+import { getSupabaseBrowserClient } from './supabase/client'
+import type { LibraryPlaylist } from './apple-music-library'
+
+export type { LibraryPlaylist } from './apple-music-library'
+export { isSuggestedPlaylist } from './apple-music-library'
 
 const SCRIPT_URL = 'https://js-cdn.music.apple.com/musickit/v3/musickit.js'
 
-interface MusicKitApiResponse<T> {
-  data: { data: T[]; next?: string }
-}
-
 export interface MusicKitInstance {
   isAuthorized: boolean
+  musicUserToken?: string
   storefrontId?: string
   authorize: () => Promise<string>
   unauthorize: () => Promise<void>
-  api: { music: <T>(path: string, query?: Record<string, unknown>) => Promise<MusicKitApiResponse<T>> }
 }
 
 interface MusicKitGlobal {
   configure: (options: { developerToken: string; app: { name: string; build: string } }) => Promise<MusicKitInstance>
-  getInstance: () => MusicKitInstance
 }
 
 declare global {
@@ -29,6 +30,8 @@ declare global {
 }
 
 export class AppleMusicUnavailable extends Error {}
+// Apple refused the saved or sent token: the person has to connect again
+export class AppleMusicReconnect extends Error {}
 
 let ready: Promise<MusicKitInstance> | null = null
 
@@ -64,88 +67,53 @@ export function prepareMusicKit(): Promise<MusicKitInstance> {
   return ready
 }
 
-export interface LibraryPlaylist {
-  id: string
-  name: string
-  artworkUrl: string | null
-}
-
-interface LibraryPlaylistResource {
-  id: string
-  attributes?: { name?: string; artwork?: { url?: string } }
-}
-
-interface LibrarySongResource {
-  id: string
-  type: string
-  attributes?: {
-    name?: string
-    artistName?: string
-    albumName?: string
-    durationInMillis?: number
-    playParams?: { catalogId?: string }
+async function call<T>(path: string, init: RequestInit = {}, music?: MusicKitInstance | null): Promise<T> {
+  const headers = new Headers(init.headers)
+  if (music?.isAuthorized && music.musicUserToken) {
+    headers.set('X-Music-User-Token', music.musicUserToken)
+    if (music.storefrontId) headers.set('X-Music-Storefront', music.storefrontId)
   }
-  relationships?: { catalog?: { data?: Array<{ id: string }> } }
-}
-
-async function pages<T>(music: MusicKitInstance, path: string, query: Record<string, unknown>, max: number): Promise<T[]> {
-  const items: T[] = []
-  let next: string | undefined = path
-  let first = true
-  while (next && items.length < max) {
-    const response: MusicKitApiResponse<T> = await music.api.music<T>(next, first ? query : undefined)
-    items.push(...response.data.data)
-    next = response.data.next
-    first = false
+  const response = await apiFetch(path, { ...init, headers })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    if (data.code === 'apple_music_reconnect' || data.code === 'apple_music_not_connected') {
+      await music?.unauthorize().catch(() => {})
+      throw new AppleMusicReconnect(data.error || 'Connect Apple Music again.')
+    }
+    throw new Error(data.error || 'Something went wrong with Apple Music. Try again.')
   }
-  return items.slice(0, max)
+  return data as T
 }
 
-// Apple's "Replay", "Heavy Rotation" and the like first: they're what someone actually plays
-const SUGGESTED = /replay|heavy rotation|on repeat|top 25|favorite|favourite|favoritas|más escuchad/i
-
-export async function listLibraryPlaylists(music: MusicKitInstance): Promise<LibraryPlaylist[]> {
-  const resources = await pages<LibraryPlaylistResource>(music, '/v1/me/library/playlists', { limit: 100 }, 500)
-  const playlists = resources
-    .filter((p) => p.attributes?.name)
-    .map((p) => ({
-      id: p.id,
-      name: p.attributes?.name as string,
-      artworkUrl: p.attributes?.artwork?.url?.replace('{w}', '80').replace('{h}', '80') ?? null,
-    }))
-  return [...playlists.filter((p) => SUGGESTED.test(p.name)), ...playlists.filter((p) => !SUGGESTED.test(p.name))]
+// Whether this account has Apple Music saved. Doesn't start a guest session just to ask.
+export async function isAppleMusicSaved(): Promise<boolean> {
+  const { data } = await getSupabaseBrowserClient().auth.getSession()
+  if (!data.session || data.session.user.is_anonymous) return false
+  const status = await call<{ saved: boolean }>('/api/apple-music/connection').catch(() => ({ saved: false }))
+  return status.saved
 }
 
-export function isSuggestedPlaylist(name: string): boolean {
-  return SUGGESTED.test(name)
+// Signs in with Apple (if needed) and saves the token to a Google account. Call from a click.
+export async function connectAppleMusic(music: MusicKitInstance): Promise<{ saved: boolean }> {
+  if (!music.isAuthorized) await music.authorize()
+  if (!music.musicUserToken) throw new Error('Apple Music did not return a sign-in. Try again.')
+  return call<{ saved: boolean }>('/api/apple-music/connection', {
+    method: 'POST',
+    body: JSON.stringify({ userToken: music.musicUserToken, storefront: music.storefrontId ?? null }),
+  })
 }
 
-function formatTime(ms: number | undefined): string {
-  if (!ms || ms <= 0) return ''
-  const seconds = Math.round(ms / 1000)
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+export async function disconnectAppleMusic(music: MusicKitInstance | null): Promise<void> {
+  await music?.unauthorize().catch(() => {})
+  const { data } = await getSupabaseBrowserClient().auth.getSession()
+  if (data.session && !data.session.user.is_anonymous) await call('/api/apple-music/connection', { method: 'DELETE' })
+}
+
+export async function listLibraryPlaylists(music: MusicKitInstance | null): Promise<LibraryPlaylist[]> {
+  return (await call<{ playlists: LibraryPlaylist[] }>('/api/apple-music/playlists', {}, music)).playlists
 }
 
 // The playlist's songs, in order, as import input: one line per song
-export async function playlistImportInput(music: MusicKitInstance, playlistId: string, max = 100): Promise<{ input: string; count: number }> {
-  const songs = await pages<LibrarySongResource>(
-    music,
-    `/v1/me/library/playlists/${encodeURIComponent(playlistId)}/tracks`,
-    { limit: 100, include: 'catalog' },
-    max,
-  )
-  const storefront = music.storefrontId || 'us'
-  const lines: string[] = []
-  for (const song of songs) {
-    if (song.type !== 'library-songs') continue
-    const catalogId = song.relationships?.catalog?.data?.[0]?.id ?? song.attributes?.playParams?.catalogId
-    const a = song.attributes
-    if (catalogId) {
-      lines.push(`https://music.apple.com/${storefront}/song/${catalogId}`)
-    } else if (a?.name && a.artistName) {
-      // Not in Apple's catalog (e.g. uploaded): found by name, like a row copied from the Mac app
-      lines.push([a.name, '', formatTime(a.durationInMillis), a.artistName, a.albumName ?? ''].map((c) => c.replace(/\t/g, ' ')).join('\t'))
-    }
-  }
-  return { input: lines.join('\n'), count: lines.length }
+export function playlistImportInput(music: MusicKitInstance | null, playlistId: string): Promise<{ input: string; count: number }> {
+  return call(`/api/apple-music/playlists/${encodeURIComponent(playlistId)}`, {}, music)
 }
