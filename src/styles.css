@@ -99,6 +99,83 @@ code {
   pointer-events: none;
 }
 
+/* Deleting a nucleus: the planet flashes, shakes, then breaks into fragments of its covers while a
+   shockwave ring spreads out, and the card fades before the grid closes the gap */
+@keyframes planetDestroyCore {
+  0% { transform: scale(1); filter: grayscale(1) contrast(1.15) brightness(1); opacity: 1; }
+  12% { transform: scale(1.07); filter: grayscale(1) contrast(1.15) brightness(2.6); opacity: 1; }
+  20% { transform: scale(1.03) translate(-3px, 1px) rotate(-2deg); filter: grayscale(1) contrast(1.15) brightness(1.6); }
+  28% { transform: scale(1.04) translate(3px, -2px) rotate(2deg); }
+  36% { transform: scale(1.02) translate(-2px, 2px) rotate(-1deg); filter: grayscale(1) contrast(1.15) brightness(2.2); opacity: 1; }
+  70%, 100% { transform: scale(0.1); filter: grayscale(1) brightness(3) blur(6px); opacity: 0; }
+}
+
+@keyframes planetDestroyRing {
+  0% { opacity: 1; }
+  30% { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+
+@keyframes planetShockwave {
+  0% { transform: translate(-50%, -50%) scale(0.35); opacity: 0; }
+  30% { opacity: 0.9; }
+  100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+}
+
+@keyframes planetDebris {
+  0% { transform: translate(-50%, -50%) rotate(0deg) scale(1); opacity: 0; }
+  32% { transform: translate(-50%, -50%) rotate(0deg) scale(1); opacity: 1; }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--rot)) scale(0.4);
+    opacity: 0;
+  }
+}
+
+@keyframes cardVanish {
+  0%, 45% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.ct-destroy-core {
+  animation: planetDestroyCore 0.95s cubic-bezier(0.5, 0, 0.75, 0) forwards;
+}
+
+.ct-destroy-ring {
+  animation: planetDestroyRing 0.6s ease-out forwards;
+}
+
+.ct-shockwave {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.35), inset 0 0 18px rgba(255, 255, 255, 0.2);
+  pointer-events: none;
+  animation: planetShockwave 0.9s 0.3s ease-out both;
+}
+
+.ct-debris {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  filter: grayscale(1) contrast(1.2) brightness(1.5);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+  animation: planetDebris 1s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.ct-card-vanish {
+  animation: cardVanish 1.05s ease-in forwards;
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ct-pulse-dot, .ct-fade-up, .ct-planet-bob, .ct-planet-surface { animation: none; }
+  .ct-destroy-core, .ct-destroy-ring { animation: planetDestroyRing 0.4s ease-out forwards; }
+  .ct-shockwave, .ct-debris { display: none; }
+  .ct-card-vanish { animation: planetDestroyRing 0.4s ease-out forwards; }
 }

@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { Lock, Plus } from 'lucide-react'
 import { Eyebrow, PulseDot, Wordmark, primaryButtonClass } from '../../components/ui'
 import { getSupabaseBrowserClient } from '../../lib/supabase/client'
@@ -126,7 +126,45 @@ function planetSize(trackCount: number): number {
   return Math.round(96 + Math.min(84, Math.sqrt(trackCount) * 14))
 }
 
-function Planet({ nucleus, size }: { nucleus: NucleusSummary; size: number }) {
+// How long the destruction plays before the card leaves the grid (matches ct-card-vanish)
+const DESTROY_MS = 1050
+
+// Fragments the planet breaks into: pieces of its covers (or plain white), thrown outward in a
+// fixed but uneven pattern so every destruction looks the same and nothing jumps on re-render
+function Debris({ covers, size }: { covers: string[]; size: number }) {
+  const pieces = useMemo(
+    () =>
+      Array.from({ length: 16 }, (_, i) => {
+        const angle = (i / 16) * Math.PI * 2 + ((i * 37) % 11) * 0.05
+        const distance = size * (0.75 + ((i * 53) % 7) * 0.12)
+        const piece = Math.round(size * (0.1 + ((i * 29) % 5) * 0.03))
+        return {
+          key: i,
+          style: {
+            width: piece,
+            height: piece,
+            backgroundImage: covers.length > 0 ? `url(${covers[i % covers.length]})` : undefined,
+            backgroundColor: covers.length > 0 ? undefined : 'rgba(255,255,255,0.85)',
+            animationDelay: `${((i * 17) % 6) * 20}ms`,
+            '--dx': `${Math.round(Math.cos(angle) * distance)}px`,
+            '--dy': `${Math.round(Math.sin(angle) * distance * 0.8)}px`,
+            '--rot': `${((i * 71) % 360) - 180}deg`,
+          } as CSSProperties,
+        }
+      }),
+    [covers, size],
+  )
+  return (
+    <>
+      <span className="ct-shockwave" style={{ width: size * 1.1, height: size * 1.1 }} />
+      {pieces.map((piece) => (
+        <span key={piece.key} className="ct-debris" style={piece.style} />
+      ))}
+    </>
+  )
+}
+
+function Planet({ nucleus, size, destroying = false }: { nucleus: NucleusSummary; size: number; destroying?: boolean }) {
   const mix = emotionMix(nucleus)
   // Fill a 3x3 grid, repeating covers when there are fewer than 9
   const tiles = nucleus.covers.length > 0 ? Array.from({ length: 9 }, (_, i) => nucleus.covers[i % nucleus.covers.length]) : []
@@ -137,7 +175,7 @@ function Planet({ nucleus, size }: { nucleus: NucleusSummary; size: number }) {
     <div className="relative flex items-center justify-center" style={{ width: ringSize, height: size * 1.25 }}>
       {/* Back half of the ring */}
       <div
-        className="absolute"
+        className={`absolute ${destroying ? 'ct-destroy-ring' : ''}`}
         style={{
           width: ringSize,
           height: ringSize,
@@ -150,7 +188,7 @@ function Planet({ nucleus, size }: { nucleus: NucleusSummary; size: number }) {
       />
       {/* The planet */}
       <div
-        className="relative overflow-hidden rounded-full border border-white/25 bg-white/[0.04] transition-[filter] duration-500 [filter:grayscale(1)_contrast(1.15)] group-hover:[filter:grayscale(0)]"
+        className={`relative overflow-hidden rounded-full border border-white/25 bg-white/[0.04] transition-[filter] duration-500 [filter:grayscale(1)_contrast(1.15)] group-hover:[filter:grayscale(0)] ${destroying ? 'ct-destroy-core' : ''}`}
         style={{ width: size, height: size, boxShadow: '0 0 60px rgba(255,255,255,0.07)' }}
       >
         {tiles.length > 0 && (
@@ -172,9 +210,10 @@ function Planet({ nucleus, size }: { nucleus: NucleusSummary; size: number }) {
         />
         <div className="ct-scanlines absolute inset-0 rounded-full" />
       </div>
+      {destroying && <Debris covers={nucleus.covers} size={size} />}
       {/* Front half of the ring passes over the planet */}
       <div
-        className="pointer-events-none absolute"
+        className={`pointer-events-none absolute ${destroying ? 'ct-destroy-ring' : ''}`}
         style={{
           width: ringSize,
           height: ringSize,
@@ -205,6 +244,7 @@ function PlanetCard({
   const [mode, setMode] = useState<'idle' | 'rename' | 'delete'>('idle')
   const [name, setName] = useState(nucleus.name)
   const [busy, setBusy] = useState(false)
+  const [destroying, setDestroying] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const mix = emotionMix(nucleus)
   const size = planetSize(nucleus.trackCount)
@@ -224,18 +264,40 @@ function PlanetCard({
     }
   }
 
+  // Deleted on the server first, so a failure never plays the animation; the list reloads once it ends
+  const destroy = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await deleteNucleus(nucleus.id)
+      setMode('idle')
+      setDestroying(true)
+      window.setTimeout(() => {
+        onChanged()
+      }, DESTROY_MS)
+    } catch (err) {
+      setError(err instanceof ApiError || err instanceof Error ? err.message : 'Something went wrong')
+      setBusy(false)
+    }
+  }
+
   const bobStyle: CSSProperties = { animationDelay: `${-index * 1.7}s` }
 
   return (
-    <div className="ct-fade-up flex flex-col items-center text-center" style={{ animationDelay: `${index * 60}ms` }}>
+    <div
+      className={`flex flex-col items-center text-center ${destroying ? 'ct-card-vanish' : 'ct-fade-up'}`}
+      style={destroying ? undefined : { animationDelay: `${index * 60}ms` }}
+      aria-hidden={destroying || undefined}
+    >
       <button
         onClick={open}
+        disabled={destroying}
         className="group flex h-[260px] items-center justify-center focus:outline-none focus-visible:ring-1 focus-visible:ring-white/60"
         aria-label={`Open ${nucleus.name}`}
       >
         {/* Only the planet drifts; the button stays put so it's an easy target */}
         <div className="ct-planet-bob" style={bobStyle}>
-          <Planet nucleus={nucleus} size={size} />
+          <Planet nucleus={nucleus} size={size} destroying={destroying} />
         </div>
       </button>
 
@@ -292,7 +354,7 @@ function PlanetCard({
           <div className="mt-2 flex justify-center gap-3">
             <button
               disabled={busy}
-              onClick={() => run(() => deleteNucleus(nucleus.id))}
+              onClick={destroy}
               className="bg-white px-3 py-1 font-semibold text-black disabled:opacity-40"
             >
               {busy ? 'deleting...' : 'delete'}
