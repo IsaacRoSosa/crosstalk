@@ -68,13 +68,19 @@ function loadScript(): Promise<MusicKitGlobal> {
     trace('MusicKit already on the page')
     return Promise.resolve(window.MusicKit)
   }
-  // MusicKit checks `process.versions.node` to tell Node from a browser. The dev server leaves a
-  // `window.process` with only `env`, which made MusicKit crash ("reading 'node'") before defining
-  // MusicKit.configure. An empty `versions` makes that check say "browser".
-  const proc = (window as { process?: { versions?: unknown } }).process
-  if (proc && typeof proc === 'object' && !proc.versions) {
-    proc.versions = {}
-    trace('added process.versions so MusicKit knows it runs in a browser')
+  // MusicKit decides whether it runs in Node by looking for a global `process`. The dev server leaves
+  // a `window.process` (with only `env`), so MusicKit took the Node path and crashed ("reading
+  // 'node'", then "Buffer is not defined") before defining MusicKit.configure. Hide that global
+  // while MusicKit starts, and put it back once its script has run.
+  const globals = window as unknown as { process?: unknown }
+  const hidden = globals.process !== undefined
+  const savedProcess = globals.process
+  if (hidden) {
+    globals.process = undefined
+    trace('hid window.process while MusicKit starts')
+  }
+  const restoreProcess = () => {
+    if (hidden && globals.process === undefined) globals.process = savedProcess
   }
   return new Promise((resolve, reject) => {
     let settled = false
@@ -91,6 +97,7 @@ function loadScript(): Promise<MusicKitGlobal> {
     script.src = SCRIPT_URL
     script.async = true
     script.onload = () => {
+      restoreProcess()
       trace('MusicKit script downloaded')
       // Downloaded but never set up (it threw while starting): say so instead of waiting
       window.setTimeout(() => {
@@ -102,6 +109,7 @@ function loadScript(): Promise<MusicKitGlobal> {
       }, 5000)
     }
     script.onerror = () => {
+      restoreProcess()
       settled = true
       window.clearInterval(poll)
       trace('MusicKit script failed to download (blocked by an ad blocker or the network?)')
