@@ -4,7 +4,7 @@
 import { decryptSecret, encryptSecret } from './crypto'
 import { HttpError } from './http'
 import { getAdminClient } from './supabase/server'
-import { AppleMusicTokenRejected, fetchUserStorefront } from './apple-music'
+import { AppleMusicPlaylistUnreadable, AppleMusicTokenRejected, fetchUserStorefront } from './apple-music'
 import type { UserContext } from './session'
 
 export interface AppleMusicConnectionStatus {
@@ -73,6 +73,11 @@ export async function withAppleMusicUser<T>(ctx: UserContext, request: Request, 
     if (error instanceof AppleMusicTokenRejected) {
       if (user.saved) await deleteAppleMusicConnection(ctx.userId)
       throw new HttpError(401, 'Apple Music needs you to connect again.', { code: 'apple_music_reconnect' })
+    }
+    if (error instanceof AppleMusicPlaylistUnreadable) {
+      throw new HttpError(404, "Apple Music didn't share this playlist's songs (it may be empty). Try another one.", {
+        code: 'apple_music_playlist_unreadable',
+      })
     }
     throw error
   }

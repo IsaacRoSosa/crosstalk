@@ -78,3 +78,29 @@ describe('apple music connection', () => {
     expect(rows.has('u1')).toBe(false)
   })
 })
+
+describe('playlists Apple won\'t list from the library', () => {
+  it('falls back to the catalog version of the playlist', async () => {
+    await saveAppleMusicToken('u1', 'tok', 'mx')
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('/me/library/playlists/p.r/tracks')) return new Response('{"errors":[]}', { status: 404 })
+      if (url.endsWith('/me/library/playlists/p.r'))
+        return new Response(JSON.stringify({ data: [{ attributes: { name: 'Replay 2026', playParams: { globalId: 'pl.rp-123' } } }] }))
+      if (url.includes('/catalog/mx/playlists/pl.rp-123/tracks'))
+        return new Response(JSON.stringify({ data: [{ id: '111', type: 'songs' }, { id: 'v', type: 'music-videos' }, { id: '222', type: 'songs' }] }))
+      return new Response('{}', { status: 404 })
+    }))
+    const lines = await withAppleMusicUser(google, req(), (u) => fetchLibraryPlaylistLines(u.userToken, 'p.r', u.storefront))
+    expect(lines).toEqual(['https://music.apple.com/mx/song/111', 'https://music.apple.com/mx/song/222'])
+  })
+
+  it('says the playlist is unreadable when nothing works', async () => {
+    await saveAppleMusicToken('u1', 'tok', 'mx')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })))
+    await expect(withAppleMusicUser(google, req(), (u) => fetchLibraryPlaylistLines(u.userToken, 'p.x', u.storefront))).rejects.toMatchObject({
+      status: 404,
+      body: { code: 'apple_music_playlist_unreadable' },
+    })
+    expect(rows.has('u1')).toBe(true)
+  })
+})

@@ -176,7 +176,9 @@ async function libraryGet<T>(path: string, userToken: string): Promise<T> {
     throw new AppleMusicTokenRejected(`Apple Music refused the token (${response.status})`)
   }
   if (!response.ok) {
-    console.warn(`[apple-music] library request failed ${JSON.stringify({ path: path.split('?')[0], status: response.status })}`)
+    const detail = (await response.text().catch(() => '')).slice(0, 300)
+    console.warn(`[apple-music] library request failed ${JSON.stringify({ path, status: response.status, detail })}`)
+    if (response.status === 404) throw new AppleMusicNotFound(path)
     throw new Error(`Apple Music library request failed: ${response.status}`)
   }
   return (await response.json()) as T
@@ -203,11 +205,58 @@ export async function fetchLibraryPlaylists(userToken: string): Promise<LibraryP
   return toLibraryPlaylists(await libraryPages<LibraryPlaylistResource>('/me/library/playlists?limit=100', userToken, 500))
 }
 
+// The playlist has no songs Apple will hand over (empty, or a kind it doesn't share)
+export class AppleMusicPlaylistUnreadable extends Error {}
+
+// Runs `read`, or returns null when Apple answers 404
+async function unless404<T>(read: () => Promise<T>): Promise<T | null> {
+  try {
+    return await read()
+  } catch (error) {
+    if (error instanceof AppleMusicNotFound) return null
+    throw error
+  }
+}
+
+interface CatalogSongResource {
+  id: string
+  type: string
+}
+
+// A library playlist's songs as import lines. Apple answers 404 on /tracks for some playlists
+// (empty ones, and Apple playlists saved to the library such as Replay), so this falls back to the
+// tracks without catalog info, then to the playlist's catalog version (its playParams.globalId).
 export async function fetchLibraryPlaylistLines(userToken: string, playlistId: string, storefront: string, max = 100): Promise<string[]> {
-  const songs = await libraryPages<LibrarySongResource>(
-    `/me/library/playlists/${encodeURIComponent(playlistId)}/tracks?limit=100&include=catalog`,
-    userToken,
-    max,
+  const store = storefrontOf(storefront)
+  const id = encodeURIComponent(playlistId)
+
+  const withCatalog = await unless404(() =>
+    libraryPages<LibrarySongResource>(`/me/library/playlists/${id}/tracks?limit=100&include=catalog`, userToken, max),
   )
-  return songsToImportLines(songs, storefrontOf(storefront))
+  if (withCatalog?.length) return songsToImportLines(withCatalog, store)
+
+  const plain = await unless404(() => libraryPages<LibrarySongResource>(`/me/library/playlists/${id}/tracks?limit=100`, userToken, max))
+  if (plain?.length) {
+    console.info(`[apple-music] read playlist without catalog info ${JSON.stringify({ playlistId })}`)
+    return songsToImportLines(plain, store)
+  }
+
+  const playlist = await unless404(() =>
+    libraryGet<{ data: Array<{ attributes?: { name?: string; playParams?: { globalId?: string } } }> }>(
+      `/me/library/playlists/${id}`,
+      userToken,
+    ),
+  )
+  const globalId = playlist?.data[0]?.attributes?.playParams?.globalId
+  console.info(
+    `[apple-music] playlist tracks not available from the library ${JSON.stringify({ playlistId, name: playlist?.data[0]?.attributes?.name, globalId })}`,
+  )
+  if (globalId) {
+    const catalogSongs = await unless404(() =>
+      libraryPages<CatalogSongResource>(`/catalog/${store}/playlists/${encodeURIComponent(globalId)}/tracks?limit=100`, userToken, max),
+    )
+    const lines = (catalogSongs ?? []).filter((song) => song.type === 'songs').map((song) => `https://music.apple.com/${store}/song/${song.id}`)
+    if (lines.length) return lines
+  }
+  throw new AppleMusicPlaylistUnreadable(playlistId)
 }
