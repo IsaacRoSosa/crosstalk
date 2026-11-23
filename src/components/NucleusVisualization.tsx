@@ -322,12 +322,23 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
     return color
   }, [])
 
+  // Darken a color if it's too light: near-white covers turned planets into flat white discs once the
+  // bloom pass blew them out. Capping lightness keeps them below the bloom threshold and shows their
+  // tint; greyscale covers become a soft silver instead of white.
+  const capLightness = useCallback((color: THREE.Color, maxLightness: number): THREE.Color => {
+    const hsl = { h: 0, s: 0, l: 0 }
+    color.getHSL(hsl)
+    if (hsl.l > maxLightness) color.setHSL(hsl.h, hsl.s, maxLightness)
+    return color
+  }, [])
+
   // Callback for when colors are extracted
   const handleColorsExtracted = useCallback((trackId: number, colors: { dominant: string; darker: string; lighter: string }) => {
     // Ensure colors are visible by brightening if too dark
-    const dominant = ensureVisibleColor(colors.dominant || '#888888', 0.3)
-    const darker = ensureVisibleColor(colors.darker || colors.dominant || '#888888', 0.15)
-    const lighter = ensureVisibleColor(colors.lighter || colors.dominant || '#aaaaaa', 0.4)
+    // ...and darkening it if it's so light it would glow white
+    const dominant = capLightness(ensureVisibleColor(colors.dominant || '#888888', 0.3), 0.6)
+    const darker = capLightness(ensureVisibleColor(colors.darker || colors.dominant || '#888888', 0.15), 0.4)
+    const lighter = capLightness(ensureVisibleColor(colors.lighter || colors.dominant || '#aaaaaa', 0.4), 0.74)
     
     const validColors = {
       dominant: `#${dominant.getHexString()}`,
@@ -344,7 +355,7 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
       trackData.glassMaterial.uniforms.darkerColor.value.copy(darker)
       trackData.glassMaterial.uniforms.lighterColor.value.copy(lighter)
     }
-  }, [ensureVisibleColor])
+  }, [ensureVisibleColor, capLightness])
 
   // Store callbacks in refs so they can be updated without recreating the scene
   const onOrbitClickRef = useRef(onOrbitClick)
@@ -1017,6 +1028,11 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
             color = vec4(1.0, 1.0, 1.0, 1.0);
           }
           
+          // Pull very light covers down a little: near-white art went past the bloom threshold and
+          // turned into a flat white disc. Darker and colorful covers are left as they are.
+          float luma = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+          color.rgb *= mix(1.0, 0.62, smoothstep(0.6, 1.0, luma));
+
           // Output with faded edges and full color
           gl_FragColor = vec4(color.rgb, alpha * color.a);
         }
