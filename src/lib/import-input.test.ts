@@ -14,3 +14,20 @@ describe('apple music links', () => {
     expect(isEmptyImport(parseImportInput('hello'))).toBe(true)
   })
 })
+
+describe('rows copied from the Apple Music app', () => {
+  it('reads title, artist, album and time', () => {
+    const t = 'Dreamer\t\t3:31\tLaufey\tBewitched\tJazz\t0\nChampion\t\t2:48\tKanye West\tGraduation\tHip-Hop/Rap\t12\nDreamer\t\t3:31\tLaufey\tBewitched\tJazz\t0\n'
+    const p = parseImportInput(t)
+    expect(p.songRows).toEqual([
+      { title: 'Dreamer', artist: 'Laufey', album: 'Bewitched', durationMs: 211000, line: 'Dreamer\t\t3:31\tLaufey\tBewitched\tJazz\t0' },
+      { title: 'Champion', artist: 'Kanye West', album: 'Graduation', durationMs: 168000, line: 'Champion\t\t2:48\tKanye West\tGraduation\tHip-Hop/Rap\t12' },
+    ])
+    expect(isEmptyImport(p)).toBe(false)
+  })
+  it('works without a time column and ignores links and plain text', () => {
+    const p = parseImportInput('Dreamer\tLaufey\tBewitched\nhttps://music.apple.com/mx/album/dreamer/1690607869?i=1690607895\njust words')
+    expect(p.songRows.map((r) => [r.title, r.artist, r.album, r.durationMs])).toEqual([['Dreamer', 'Laufey', 'Bewitched', null]])
+    expect(p.appleMusicSongs).toEqual([{ storefront: 'mx', id: '1690607895' }])
+  })
+})

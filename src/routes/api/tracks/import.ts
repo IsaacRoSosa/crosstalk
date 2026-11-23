@@ -4,7 +4,14 @@ import { requireNucleus, requireUser, type NucleusContext } from '../../../lib/s
 import { isEmptyImport, parseImportInput } from '../../../lib/import-input'
 import { fetchDeezerPlaylistTracks, resolveDeezerShortLink, type DeezerTrack } from '../../../lib/deezer'
 import { fetchAppleMusicPlaylistSongs, isAppleMusicConfigured, type AppleMusicSong } from '../../../lib/apple-music'
-import { addAppleMusicTrack, addDeezerTrack, addSpotifyTrack, type AddTrackResult, type OnProgress } from '../../../lib/track-pipeline'
+import {
+  addAppleMusicTrack,
+  addDeezerTrack,
+  addSongByName,
+  addSpotifyTrack,
+  type AddTrackResult,
+  type OnProgress,
+} from '../../../lib/track-pipeline'
 import { log } from '../../../lib/log'
 import type { Track } from '../../../types/track'
 import type { ImportEvent, ImportIssue } from '../../../types/import'
@@ -214,6 +221,7 @@ export const Route = createFileRoute('/api/tracks/import')({
             parsed.spotifyTrackIds.length > 0 ||
             parsed.deezerTrackIds.length > 0 ||
             parsed.deezerPlaylistIds.length > 0 ||
+            parsed.songRows.length > 0 ||
             hasAppleLinks
           if (!hasImportableLinks) {
             throw new HttpError(
@@ -277,12 +285,17 @@ export const Route = createFileRoute('/api/tracks/import')({
             }
           }
 
+          for (const row of parsed.songRows) {
+            jobs.push({ label: `${row.title} - ${row.artist}`, link: row.line, run: (p) => addSongByName(ctx, row, p) })
+          }
+
           log.info('import', 'starting import', {
             spotifyTracks: parsed.spotifyTrackIds.length,
             deezerTracks: parsed.deezerTrackIds.length,
             deezerPlaylists: parsed.deezerPlaylistIds.length,
             appleMusicSongs: parsed.appleMusicSongs.length,
             appleMusicPlaylists: parsed.appleMusicPlaylists.length,
+            songRows: parsed.songRows.length,
             jobs: jobs.length,
             targetSuccess,
             maxAttempts,

@@ -4,8 +4,9 @@
 import { HttpError } from './http'
 import { requireEnv } from './env'
 import { fetchSpotifyMetadata } from './spotify'
-import { fetchDeezerTrack, findDeezerGenre, type DeezerTrack } from './deezer'
-import { fetchAppleMusicSong, isAppleMusicConfigured, type AppleMusicSong } from './apple-music'
+import { fetchDeezerTrack, findDeezerGenre, searchDeezerTrack, type DeezerTrack } from './deezer'
+import { fetchAppleMusicSong, isAppleMusicConfigured, searchAppleMusicSong, type AppleMusicSong } from './apple-music'
+import type { PastedSongRow } from './import-input'
 import { findGeniusSongUrl } from './genius'
 import { findLyrics } from './lrclib'
 import { ANALYSIS_VERSION, analyzeLyrics } from './ai/analysis'
@@ -312,4 +313,23 @@ export async function addAppleMusicTrack(
     throw new HttpError(502, 'Could not get this song from Apple Music')
   }
   return addCandidate(ctx, fromAppleMusic(full), known, onProgress)
+}
+
+// A song pasted by name (a row copied from the Apple Music app): found in Apple's catalog when it's
+// set up, otherwise on Deezer, then added like a link to it would be
+export async function addSongByName(ctx: NucleusContext, row: PastedSongRow, onProgress?: OnProgress): Promise<AddTrackResult> {
+  const query = { title: row.title, artist: row.artist, durationMs: row.durationMs }
+  try {
+    if (isAppleMusicConfigured()) {
+      const song = await searchAppleMusicSong(query)
+      if (song) return addAppleMusicTrack(ctx, song, onProgress)
+    }
+    const track = await searchDeezerTrack(query)
+    if (track) return addDeezerTrack(ctx, track.id, onProgress)
+  } catch (error) {
+    if (error instanceof HttpError) throw error
+    console.error(`Error searching for ${row.title} - ${row.artist}:`, error)
+    throw new HttpError(502, "Couldn't look this song up. Please try again.")
+  }
+  throw new HttpError(404, "Couldn't find this song by its name.")
 }

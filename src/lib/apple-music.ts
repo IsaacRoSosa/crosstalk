@@ -3,6 +3,7 @@
 // would also need a Music User Token from MusicKit JS; this file only uses the developer token.
 // https://developer.apple.com/documentation/applemusicapi
 import { createPrivateKey, sign } from 'node:crypto'
+import { pickSong, type SongQuery } from './song-match'
 
 const API = 'https://api.music.apple.com/v1'
 // Apple allows up to ~6 months; a short-lived token cached per server instance is plenty
@@ -136,4 +137,15 @@ export async function fetchAppleMusicPlaylistSongs(id: string, storefront?: stri
     next = page.next?.replace(/^\/v1/, '')
   }
   return songs.slice(0, maxSongs)
+}
+
+// Finds a song by title and artist (rows pasted from the Apple Music app carry no id).
+// Null when the catalog has nothing that really matches.
+export async function searchAppleMusicSong(query: SongQuery, storefront?: string | null): Promise<AppleMusicSong | null> {
+  const term = encodeURIComponent(`${query.title} ${query.artist}`.slice(0, 200))
+  const body = await appleGet<{ results?: { songs?: { data?: SongResource[] } } }>(
+    `/catalog/${storefrontOf(storefront)}/search?types=songs&limit=10&term=${term}`,
+  )
+  const songs = (body.results?.songs?.data ?? []).map(toAppleMusicSong).filter((song): song is AppleMusicSong => song !== null)
+  return pickSong(query, songs)
 }

@@ -39,7 +39,7 @@ function setStepInUrl(step: Step) {
 }
 
 function countSongs(parsed: ParsedImportInput): number {
-  return parsed.spotifyTrackIds.length + parsed.deezerTrackIds.length + parsed.appleMusicSongs.length
+  return parsed.spotifyTrackIds.length + parsed.deezerTrackIds.length + parsed.appleMusicSongs.length + parsed.songRows.length
 }
 
 function hasPlaylist(parsed: ParsedImportInput): boolean {
@@ -99,6 +99,8 @@ function MusicStep({ onContinue }: { onContinue: () => void }) {
   if (parsed.appleMusicSongs.length)
     detected.push(`${parsed.appleMusicSongs.length} apple music song${parsed.appleMusicSongs.length === 1 ? '' : 's'}`)
   if (applePlaylists) detected.push(`${applePlaylists} apple music playlist${applePlaylists === 1 ? '' : 's'}`)
+  if (parsed.songRows.length)
+    detected.push(`${parsed.songRows.length} copied song${parsed.songRows.length === 1 ? '' : 's'}`)
 
   const canContinue = (songs > 0 || playlists > 0) && !isEmptyImport(parsed)
 
@@ -154,7 +156,11 @@ function MusicStep({ onContinue }: { onContinue: () => void }) {
               detail="the same way from any playlist: select songs (cmd/ctrl+a) and copy them (cmd/ctrl+c)"
             />
             <SourceRow mark="D" name="deezer" detail="paste a link to a public playlist or a song" />
-            <SourceRow mark="A" name="apple music" detail="paste a link to a song or a playlist you've shared" />
+            <SourceRow
+              mark="A"
+              name="apple music"
+              detail="in the mac app, open replay (or any playlist), select the songs (cmd+a) and copy them (cmd+c). song and shared playlist links work too"
+            />
           </div>
 
           <textarea
@@ -174,7 +180,7 @@ function MusicStep({ onContinue }: { onContinue: () => void }) {
                 : detected.length > 0
                   ? `found ${detected.join(' · ')}${songs > MAX_SONGS_PER_IMPORT || playlists > 0 ? ` · the first ${MAX_SONGS_PER_IMPORT} with lyrics will be added` : ''}${parsed.spotifyPlaylistIds.length > 0 ? " · spotify playlist links are skipped (copy their songs instead)" : ''}${parsed.appleMusicAlbumCount > 0 ? ' · album links are skipped (share a song from them)' : ''}`
                   : input.trim()
-                    ? 'no spotify, deezer or apple music links found yet'
+                    ? 'no spotify, deezer or apple music songs found yet'
                     : ''}
           </div>
         </div>

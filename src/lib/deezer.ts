@@ -1,6 +1,8 @@
 // Deezer's public API: catalog, tracks and public playlists, no key required.
 // https://developers.deezer.com/api
 
+import { pickSong, type SongQuery } from './song-match'
+
 const DEEZER_API = 'https://api.deezer.com'
 const SHORT_LINK_HOSTS = new Set(['link.deezer.com', 'deezer.page.link'])
 
@@ -75,4 +77,19 @@ export async function resolveDeezerShortLink(url: string): Promise<string | null
   } catch {
     return null
   }
+}
+
+// Finds a song by title and artist, for pasted rows when Apple Music isn't set up.
+// Null when Deezer has nothing that really matches.
+export async function searchDeezerTrack(query: SongQuery): Promise<DeezerTrack | null> {
+  const quote = (value: string) => value.replace(/"/g, '')
+  const q = encodeURIComponent(`artist:"${quote(query.artist)}" track:"${quote(query.title)}"`)
+  const page = await deezerGet<{ data: DeezerTrack[] }>(`/search?limit=10&q=${q}`)
+  const candidates = page.data.map((track) => ({
+    track,
+    title: track.title,
+    artist: track.artist?.name ?? '',
+    durationMs: track.duration > 0 ? track.duration * 1000 : null,
+  }))
+  return pickSong(query, candidates)?.track ?? null
 }

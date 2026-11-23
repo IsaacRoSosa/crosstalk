@@ -654,7 +654,8 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
     }
 
     // Single songs are added without the progress bar or a summary
-    const songCount = parsed.spotifyTrackIds.length + parsed.deezerTrackIds.length + parsed.appleMusicSongs.length
+    const songCount =
+      parsed.spotifyTrackIds.length + parsed.deezerTrackIds.length + parsed.appleMusicSongs.length + parsed.songRows.length
     const isBatch =
       songCount > 1 ||
       parsed.deezerPlaylistIds.length > 0 ||
@@ -1009,13 +1010,19 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
           {/* Add Track Input */}
           <div className="mb-4">
             <div className="flex gap-2">
-              <input
-                type="text"
+              {/* A textarea keeps the line breaks of pasted rows (songs copied from the Apple Music app) */}
+              <textarea
+                rows={1}
                 value={importInput}
                 onChange={e => setImportInput(e.target.value)}
-                onKeyPress={e => e.key === 'Enter' && addTrack()}
-                placeholder="Paste Spotify songs, or a Deezer or Apple Music playlist..."
-                className="flex-1 bg-black border border-white/30 px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-white font-mono"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    addTrack()
+                  }
+                }}
+                placeholder="Paste Spotify or Apple Music songs, or a playlist link..."
+                className="flex-1 min-w-0 resize-none overflow-hidden whitespace-nowrap bg-black border border-white/30 px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-white font-mono"
                 disabled={isAnalyzing}
               />
               <button
@@ -1028,7 +1035,7 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
               </button>
             </div>
             <p className="mt-1 text-[11px] leading-snug text-white/40 font-mono">
-              Tip: in the Spotify desktop app, open On Repeat (or any playlist), select all (Cmd/Ctrl+A) and copy (Cmd/Ctrl+C) to paste up to 30 at once.
+              Tip: in the Spotify desktop app (On Repeat) or the Apple Music app on a Mac (Replay), open the playlist, select all (Cmd/Ctrl+A) and copy (Cmd/Ctrl+C) to paste up to 30 at once.
             </p>
             {playlistProgress && (
               <div className="mt-2 border border-white/30 bg-black/50 p-2 font-mono">
