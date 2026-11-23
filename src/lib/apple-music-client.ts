@@ -64,14 +64,22 @@ let ready: Promise<MusicKitInstance> | null = null
 // MusicKit announces itself with a "musickitloaded" event; the global is also polled in case the
 // event fired before we listened (e.g. the script was already on the page)
 function loadScript(): Promise<MusicKitGlobal> {
-  if (window.MusicKit) {
+  if (typeof window.MusicKit?.configure === 'function') {
     trace('MusicKit already on the page')
     return Promise.resolve(window.MusicKit)
+  }
+  // MusicKit checks `process.versions.node` to tell Node from a browser. The dev server leaves a
+  // `window.process` with only `env`, which made MusicKit crash ("reading 'node'") before defining
+  // MusicKit.configure. An empty `versions` makes that check say "browser".
+  const proc = (window as { process?: { versions?: unknown } }).process
+  if (proc && typeof proc === 'object' && !proc.versions) {
+    proc.versions = {}
+    trace('added process.versions so MusicKit knows it runs in a browser')
   }
   return new Promise((resolve, reject) => {
     let settled = false
     const finish = (how: string) => {
-      if (settled || !window.MusicKit) return
+      if (settled || typeof window.MusicKit?.configure !== 'function') return
       settled = true
       window.clearInterval(poll)
       trace('MusicKit loaded', { how })
@@ -82,7 +90,17 @@ function loadScript(): Promise<MusicKitGlobal> {
     const script = document.createElement('script')
     script.src = SCRIPT_URL
     script.async = true
-    script.onload = () => trace('MusicKit script downloaded')
+    script.onload = () => {
+      trace('MusicKit script downloaded')
+      // Downloaded but never set up (it threw while starting): say so instead of waiting
+      window.setTimeout(() => {
+        if (settled) return
+        settled = true
+        window.clearInterval(poll)
+        trace('MusicKit downloaded but did not start', { hasGlobal: Boolean(window.MusicKit) })
+        reject(new Error("Apple Music didn't start in this browser. Reload the page and try again."))
+      }, 5000)
+    }
     script.onerror = () => {
       settled = true
       window.clearInterval(poll)
