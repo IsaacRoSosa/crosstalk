@@ -29,21 +29,67 @@ declare global {
   }
 }
 
+// Every step shows up in the browser console as [apple-music] ..., to see where a connection stops
+function trace(message: string, details?: Record<string, unknown>) {
+  if (details) console.info(`[apple-music] ${message}`, details)
+  else console.info(`[apple-music] ${message}`)
+}
+
+// Rejects instead of waiting forever when Apple's script or sign-in never answers
+function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      trace(`${what} timed out`, { ms })
+      reject(new Error(`Apple Music didn't answer (${what}). Reload the page and try again.`))
+    }, ms)
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        window.clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
+
 export class AppleMusicUnavailable extends Error {}
 // Apple refused the saved or sent token: the person has to connect again
 export class AppleMusicReconnect extends Error {}
 
 let ready: Promise<MusicKitInstance> | null = null
 
+// MusicKit announces itself with a "musickitloaded" event; the global is also polled in case the
+// event fired before we listened (e.g. the script was already on the page)
 function loadScript(): Promise<MusicKitGlobal> {
-  if (window.MusicKit) return Promise.resolve(window.MusicKit)
+  if (window.MusicKit) {
+    trace('MusicKit already on the page')
+    return Promise.resolve(window.MusicKit)
+  }
   return new Promise((resolve, reject) => {
-    const done = () => (window.MusicKit ? resolve(window.MusicKit) : reject(new Error('MusicKit did not load')))
-    document.addEventListener('musickitloaded', done, { once: true })
+    let settled = false
+    const finish = (how: string) => {
+      if (settled || !window.MusicKit) return
+      settled = true
+      window.clearInterval(poll)
+      trace('MusicKit loaded', { how })
+      resolve(window.MusicKit)
+    }
+    const poll = window.setInterval(() => finish('global'), 200)
+    document.addEventListener('musickitloaded', () => finish('event'), { once: true })
     const script = document.createElement('script')
     script.src = SCRIPT_URL
     script.async = true
-    script.onerror = () => reject(new Error("Couldn't load Apple Music. Check your connection or ad blocker."))
+    script.onload = () => trace('MusicKit script downloaded')
+    script.onerror = () => {
+      settled = true
+      window.clearInterval(poll)
+      trace('MusicKit script failed to download (blocked by an ad blocker or the network?)')
+      reject(new Error("Couldn't load Apple Music. Check your connection or ad blocker."))
+    }
+    trace('loading MusicKit script', { src: SCRIPT_URL })
     document.head.appendChild(script)
   })
 }
@@ -53,13 +99,26 @@ function loadScript(): Promise<MusicKitGlobal> {
 export function prepareMusicKit(): Promise<MusicKitInstance> {
   if (!ready) {
     ready = (async () => {
-      const response = await fetch('/api/apple-music/token')
+      trace('requesting developer token')
+      const response = await withTimeout(fetch('/api/apple-music/token'), 15_000, 'developer token')
+      trace('developer token response', { status: response.status })
       if (response.status === 503) throw new AppleMusicUnavailable('Apple Music is not set up')
-      if (!response.ok) throw new Error("Couldn't start Apple Music. Try again later.")
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}))
+        throw new Error(body.error || "Couldn't start Apple Music. Try again later.")
+      }
       const { token } = (await response.json()) as { token: string }
-      const MusicKit = await loadScript()
-      return MusicKit.configure({ developerToken: token, app: { name: 'Crosstalk', build: '1.0' } })
+      const MusicKit = await withTimeout(loadScript(), 20_000, 'loading MusicKit')
+      trace('configuring MusicKit')
+      const music = await withTimeout(
+        MusicKit.configure({ developerToken: token, app: { name: 'Crosstalk', build: '1.0' } }),
+        20_000,
+        'configuring MusicKit',
+      )
+      trace('MusicKit ready', { isAuthorized: music.isAuthorized, storefront: music.storefrontId })
+      return music
     })().catch((error) => {
+      trace('MusicKit failed', { error: error instanceof Error ? error.message : String(error) })
       ready = null
       throw error
     })
@@ -75,6 +134,7 @@ async function call<T>(path: string, init: RequestInit = {}, music?: MusicKitIns
   }
   const response = await apiFetch(path, { ...init, headers })
   const data = await response.json().catch(() => ({}))
+  trace(`${init.method ?? 'GET'} ${path}`, { status: response.status, ...(response.ok ? {} : { error: data.error, code: data.code }) })
   if (!response.ok) {
     if (data.code === 'apple_music_reconnect' || data.code === 'apple_music_not_connected') {
       await music?.unauthorize().catch(() => {})
@@ -95,7 +155,16 @@ export async function isAppleMusicSaved(): Promise<boolean> {
 
 // Signs in with Apple (if needed) and saves the token to a Google account. Call from a click.
 export async function connectAppleMusic(music: MusicKitInstance): Promise<{ saved: boolean }> {
-  if (!music.isAuthorized) await music.authorize()
+  if (!music.isAuthorized) {
+    trace('asking Apple for permission')
+    try {
+      await music.authorize()
+    } catch (error) {
+      trace('Apple sign-in failed', { error: error instanceof Error ? error.message : String(error) })
+      throw error
+    }
+    trace('Apple sign-in done', { hasUserToken: Boolean(music.musicUserToken), storefront: music.storefrontId })
+  }
   if (!music.musicUserToken) throw new Error('Apple Music did not return a sign-in. Try again.')
   return call<{ saved: boolean }>('/api/apple-music/connection', {
     method: 'POST',

@@ -88,7 +88,11 @@ async function appleGet<T>(path: string): Promise<T> {
     signal: AbortSignal.timeout(12_000),
   })
   if (response.status === 404) throw new AppleMusicNotFound(path)
-  if (!response.ok) throw new Error(`Apple Music request failed: ${response.status}`)
+  if (!response.ok) {
+    // 401: the developer token was refused (team id, key id or key don't match)
+    console.warn(`[apple-music] catalog request failed ${JSON.stringify({ path, status: response.status })}`)
+    throw new Error(`Apple Music request failed: ${response.status}`)
+  }
   return (await response.json()) as T
 }
 
@@ -167,8 +171,14 @@ async function libraryGet<T>(path: string, userToken: string): Promise<T> {
     headers: { Authorization: `Bearer ${developerToken()}`, 'Music-User-Token': userToken },
     signal: AbortSignal.timeout(12_000),
   })
-  if (response.status === 401 || response.status === 403) throw new AppleMusicTokenRejected(`Apple Music refused the token (${response.status})`)
-  if (!response.ok) throw new Error(`Apple Music library request failed: ${response.status}`)
+  if (response.status === 401 || response.status === 403) {
+    console.warn(`[apple-music] library request refused ${JSON.stringify({ path: path.split('?')[0], status: response.status })}`)
+    throw new AppleMusicTokenRejected(`Apple Music refused the token (${response.status})`)
+  }
+  if (!response.ok) {
+    console.warn(`[apple-music] library request failed ${JSON.stringify({ path: path.split('?')[0], status: response.status })}`)
+    throw new Error(`Apple Music library request failed: ${response.status}`)
+  }
   return (await response.json()) as T
 }
 
