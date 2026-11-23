@@ -8,6 +8,7 @@ import { AiConnectionPanel } from '../../../components/AiConnectionPanel'
 import { AccountPanel } from '../../../components/AccountPanel'
 import { ImpressionCard } from '../../../components/ImpressionCard'
 import { ShareButton } from '../../../components/ShareButton'
+import { AppleMusicConnect } from '../../../components/AppleMusicConnect'
 import { TrackListView, songSignals, type NucleusOption, type TransferTarget } from '../../../components/TrackListView'
 import { PulseDot, primaryButtonClass } from '../../../components/ui'
 import type { Track } from '../../../types/track'
@@ -643,8 +644,9 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
     return `${verb} ${count} song${count === 1 ? '' : 's'} to ${targetName.toLowerCase()}${already}`
   }
 
-  const addTrack = async () => {
-    const input = importInput.trim()
+  // `pasted` is for input that doesn't come from the box (a playlist picked from Apple Music)
+  const addTrack = async (pasted?: string) => {
+    const input = (pasted ?? importInput).trim()
     if (!input) return
 
     const parsed = parseImportInput(input)
@@ -1026,7 +1028,7 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
                 disabled={isAnalyzing}
               />
               <button
-                onClick={addTrack}
+                onClick={() => addTrack()}
                 disabled={!importInput.trim() || isAnalyzing}
                 className="px-3 py-2 bg-white text-black hover:bg-gray-200 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors flex items-center gap-1 font-semibold font-mono text-sm"
               >
@@ -1037,6 +1039,14 @@ function NucleusScreen({ nucleusId }: { nucleusId: number }) {
             <p className="mt-1 text-[11px] leading-snug text-white/40 font-mono">
               Tip: in the Spotify desktop app (On Repeat) or the Apple Music app on a Mac (Replay), open the playlist, select all (Cmd/Ctrl+A) and copy (Cmd/Ctrl+C) to paste up to 30 at once.
             </p>
+            <AppleMusicConnect
+              className="mt-2"
+              onPick={(input) => {
+                if (isAnalyzing) return
+                setImportInput(input)
+                addTrack(input)
+              }}
+            />
             {playlistProgress && (
               <div className="mt-2 border border-white/30 bg-black/50 p-2 font-mono">
                 <div className="flex items-center justify-between gap-2 mb-1">

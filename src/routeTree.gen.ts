@@ -21,6 +21,7 @@ import { Route as STokenRouteImport } from './routes/s/$token'
 import { Route as ApiAccountIndexRouteImport } from './routes/api/account/index'
 import { Route as ApiAccountMergeRouteImport } from './routes/api/account/merge'
 import { Route as ApiAiConnectionRouteImport } from './routes/api/ai/connection'
+import { Route as ApiAppleMusicTokenRouteImport } from './routes/api/apple-music/token'
 import { Route as ApiChatIndexRouteImport } from './routes/api/chat/index'
 import { Route as ApiChatMessageRouteImport } from './routes/api/chat/message'
 import { Route as ApiNucleiIndexRouteImport } from './routes/api/nuclei/index'
@@ -92,6 +93,11 @@ const ApiAccountMergeRoute = ApiAccountMergeRouteImport.update({
 const ApiAiConnectionRoute = ApiAiConnectionRouteImport.update({
   id: '/api/ai/connection',
   path: '/api/ai/connection',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAppleMusicTokenRoute = ApiAppleMusicTokenRouteImport.update({
+  id: '/api/apple-music/token',
+  path: '/api/apple-music/token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiChatIndexRoute = ApiChatIndexRouteImport.update({
@@ -167,6 +173,7 @@ export interface FileRoutesByFullPath {
   '/app/': typeof AppIndexRoute
   '/api/account/merge': typeof ApiAccountMergeRoute
   '/api/ai/connection': typeof ApiAiConnectionRoute
+  '/api/apple-music/token': typeof ApiAppleMusicTokenRoute
   '/api/chat/message': typeof ApiChatMessageRoute
   '/api/tracks/import': typeof ApiTracksImportRoute
   '/api/tracks/transfer': typeof ApiTracksTransferRoute
@@ -193,6 +200,7 @@ export interface FileRoutesByTo {
   '/app': typeof AppIndexRoute
   '/api/account/merge': typeof ApiAccountMergeRoute
   '/api/ai/connection': typeof ApiAiConnectionRoute
+  '/api/apple-music/token': typeof ApiAppleMusicTokenRoute
   '/api/chat/message': typeof ApiChatMessageRoute
   '/api/tracks/import': typeof ApiTracksImportRoute
   '/api/tracks/transfer': typeof ApiTracksTransferRoute
@@ -220,6 +228,7 @@ export interface FileRoutesById {
   '/app/': typeof AppIndexRoute
   '/api/account/merge': typeof ApiAccountMergeRoute
   '/api/ai/connection': typeof ApiAiConnectionRoute
+  '/api/apple-music/token': typeof ApiAppleMusicTokenRoute
   '/api/chat/message': typeof ApiChatMessageRoute
   '/api/tracks/import': typeof ApiTracksImportRoute
   '/api/tracks/transfer': typeof ApiTracksTransferRoute
@@ -248,6 +257,7 @@ export interface FileRouteTypes {
     | '/app/'
     | '/api/account/merge'
     | '/api/ai/connection'
+    | '/api/apple-music/token'
     | '/api/chat/message'
     | '/api/tracks/import'
     | '/api/tracks/transfer'
@@ -274,6 +284,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/api/account/merge'
     | '/api/ai/connection'
+    | '/api/apple-music/token'
     | '/api/chat/message'
     | '/api/tracks/import'
     | '/api/tracks/transfer'
@@ -300,6 +311,7 @@ export interface FileRouteTypes {
     | '/app/'
     | '/api/account/merge'
     | '/api/ai/connection'
+    | '/api/apple-music/token'
     | '/api/chat/message'
     | '/api/tracks/import'
     | '/api/tracks/transfer'
@@ -327,6 +339,7 @@ export interface RootRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
   ApiAccountMergeRoute: typeof ApiAccountMergeRoute
   ApiAiConnectionRoute: typeof ApiAiConnectionRoute
+  ApiAppleMusicTokenRoute: typeof ApiAppleMusicTokenRoute
   ApiChatMessageRoute: typeof ApiChatMessageRoute
   ApiTracksImportRoute: typeof ApiTracksImportRoute
   ApiTracksTransferRoute: typeof ApiTracksTransferRoute
@@ -428,6 +441,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiConnectionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/apple-music/token': {
+      id: '/api/apple-music/token'
+      path: '/api/apple-music/token'
+      fullPath: '/api/apple-music/token'
+      preLoaderRoute: typeof ApiAppleMusicTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/chat/': {
       id: '/api/chat/'
       path: '/api/chat'
@@ -527,6 +547,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppIndexRoute: AppIndexRoute,
   ApiAccountMergeRoute: ApiAccountMergeRoute,
   ApiAiConnectionRoute: ApiAiConnectionRoute,
+  ApiAppleMusicTokenRoute: ApiAppleMusicTokenRoute,
   ApiChatMessageRoute: ApiChatMessageRoute,
   ApiTracksImportRoute: ApiTracksImportRoute,
   ApiTracksTransferRoute: ApiTracksTransferRoute,

@@ -2,6 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { NucleusVisualization } from '../components/NucleusVisualization'
 import { Eyebrow, GhostButton, Panel, PanelHeader, PrimaryButton, PulseDot, ghostButtonClass, primaryButtonClass, Wordmark } from '../components/ui'
+import { AppleMusicConnect } from '../components/AppleMusicConnect'
 import { apiFetch } from '../lib/api-client'
 import { isEmptyImport, parseImportInput, type ParsedImportInput } from '../lib/import-input'
 import { importSongs, type ImportProgress, type ImportResult } from '../lib/import-client'
@@ -117,8 +118,8 @@ function MusicStep({ onContinue }: { onContinue: () => void }) {
         <PanelHeader title="your music" step="step 1 / 2" />
         <div className="space-y-5 p-5">
           <p className="text-xs leading-relaxed text-white/60">
-            paste the songs you keep coming back to. crosstalk reads their lyrics, never your account: there's nothing to log
-            in to.
+            paste the songs you keep coming back to. crosstalk only reads the songs you give it and their lyrics, nothing else
+            about you.
           </p>
 
           {/* The recommended source: what you actually play, not what you'd pick to show */}
@@ -159,8 +160,9 @@ function MusicStep({ onContinue }: { onContinue: () => void }) {
             <SourceRow
               mark="A"
               name="apple music"
-              detail="in the mac app, open replay (or any playlist), select the songs (cmd+a) and copy them (cmd+c). song and shared playlist links work too"
+              detail="connect it and pick your replay (or any playlist). or, in the mac app, select a playlist's songs (cmd+a), copy them (cmd+c) and paste them below"
             />
+            <AppleMusicConnect className="pl-9" onPick={(picked) => setInput(picked)} />
           </div>
 
           <textarea

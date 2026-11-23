@@ -79,7 +79,9 @@ function Privacy() {
           </ul>
           <p>
             We don't store song lyrics: they're fetched when a song is read and thrown away afterwards. We don't connect to your
-            Spotify account; songs come from the links you paste.
+            Spotify account; songs come from the links you paste. If you connect Apple Music, your browser reads your playlist
+            names and the songs of the one you pick straight from Apple; we only receive those songs, and your Apple Music sign-in
+            stays in your browser.
           </p>
         </Section>
 
