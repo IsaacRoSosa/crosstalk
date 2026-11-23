@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
 import { AiConnectionPanel } from '../components/AiConnectionPanel'
+import { AppleMusicStatus } from '../components/AppleMusicConnect'
 import { Eyebrow, PulseDot, Wordmark } from '../components/ui'
 import { getSupabaseBrowserClient } from '../lib/supabase/client'
 import { deleteAccount, saveWithGoogle, signOut, toAccountInfo, type AccountInfo } from '../lib/auth'
@@ -117,6 +118,10 @@ function Profile() {
 
         <Block title="ai connection">
           <AiConnectionPanel />
+        </Block>
+
+        <Block title="apple music">
+          <AppleMusicStatus />
         </Block>
 
         <Block title="what crosstalk has">
